@@ -1,0 +1,58 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Solo la sorgente selezionata crea e aggiorna i sensori Home Assistant. L’inoltro cloud è indipendente. Le impostazioni avanzate richiedono indirizzi verificati della stazione fisica e del proxy.",
+        "data": {
+          "weatherunderground_proxy": "Proxy Weather Underground",
+          "weathercloud_proxy": "Proxy Weathercloud",
+          "dns_servers": "DNS Servers",
+          "sensor_source": "Sorgente dei sensori",
+          "sensor_timeout": "Timeout disponibilità sensori (secondi)",
+          "trusted_sensor_proxies": "Avanzate: IP dei proxy sensori attendibili",
+          "anonymous_station_address": "Avanzate: IP della stazione fisica associata",
+          "legacy_anonymous_binding": "Avanzate: associazione al dispositivo anonimo preesistente"
+        },
+        "data_description": {
+          "dns_servers": "Comma-separated DNS server IP addresses used for cloud forwarding.",
+          "sensor_source": "Wunderground or Weathercloud. No automatic fallback or first-packet selection.",
+          "sensor_timeout": "Default 900 seconds accommodates Weathercloud’s 10-minute interval. Missing fields expire independently.",
+          "trusted_sensor_proxies": "Comma-separated numeric transport-peer IPs. Empty trusts no forwarding headers. Only one numeric X-Forwarded-For hop is accepted. Authentication is unchanged.",
+          "anonymous_station_address": "Optional numeric IP representing exactly one physical station. Required for blank IDs and cross-protocol identity continuity.",
+          "legacy_anonymous_binding": "Only enable after verifying that the existing anonymous device is the bound station. Rain and irradiance get new entities. History is not rewritten."
+        }
+      },
+      "reconfigure": {
+        "description": "Solo la sorgente selezionata crea e aggiorna i sensori Home Assistant. L’inoltro cloud è indipendente. Le impostazioni avanzate richiedono indirizzi verificati della stazione fisica e del proxy.",
+        "data": {
+          "weatherunderground_proxy": "Proxy Weather Underground",
+          "weathercloud_proxy": "Proxy Weathercloud",
+          "dns_servers": "DNS Servers",
+          "sensor_source": "Sorgente dei sensori",
+          "sensor_timeout": "Timeout disponibilità sensori (secondi)",
+          "trusted_sensor_proxies": "Avanzate: IP dei proxy sensori attendibili",
+          "anonymous_station_address": "Avanzate: IP della stazione fisica associata",
+          "legacy_anonymous_binding": "Avanzate: associazione al dispositivo anonimo preesistente"
+        },
+        "data_description": {
+          "dns_servers": "Comma-separated DNS server IP addresses used for cloud forwarding.",
+          "sensor_source": "Wunderground or Weathercloud. No automatic fallback or first-packet selection.",
+          "sensor_timeout": "Default 900 seconds accommodates Weathercloud’s 10-minute interval. Missing fields expire independently.",
+          "trusted_sensor_proxies": "Comma-separated numeric transport-peer IPs. Empty trusts no forwarding headers. Only one numeric X-Forwarded-For hop is accepted. Authentication is unchanged.",
+          "anonymous_station_address": "Optional numeric IP representing exactly one physical station. Required for blank IDs and cross-protocol identity continuity.",
+          "legacy_anonymous_binding": "Only enable after verifying that the existing anonymous device is the bound station. Rain and irradiance get new entities. History is not rewritten."
+        }
+      }
+    },
+    "create_entry": {
+      "default": "To finish setting up the integration, please follow the README for DNS and HTTP configuration.\n\nThe Home Assistant destination is `https://{address}:{port}`."
+    },
+    "abort": {
+      "single_instance": "Only one instance can use the receiver paths.",
+      "reconfigure_successful": "The configuration has been saved and the integration will reload."
+    },
+    "error": {
+      "invalid_sensor_config": "Choose a supported source, timeout from 1 to 86400 seconds, numeric IP addresses, and an explicit station binding before enabling legacy association."
+    }
+  }
+}

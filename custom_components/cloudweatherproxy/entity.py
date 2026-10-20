@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 
 from .aiocloudweather import Sensor, WeatherStation
 
@@ -11,9 +11,21 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN, UNIT_DESCRIPTION_MAPPING
+from .const import DOMAIN, QUANTITY_DESCRIPTIONS
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def quantity_key(sensor: Sensor, station: WeatherStation) -> str:
+    """Keep incompatible dimensions and unverified counter series separate."""
+    source = "wunderground" if station.vendor.name == "WUNDERGROUND" else "weathercloud"
+    if sensor.name == "rain":
+        return "rain_1h" if source == "wunderground" else "rain_intensity"
+    if sensor.name in ("dailyrain", "weeklyrain", "monthlyrain"):
+        return f"{source}_{sensor.name}"
+    if sensor.name == "solarradiation":
+        return "irradiance"
+    return sensor.name
 
 
 class CloudWeatherBaseEntity(Entity):
@@ -30,15 +42,16 @@ class CloudWeatherBaseEntity(Entity):
         self.sensor = sensor
         self.station = station
 
-        self._attr_unique_id = f"{station.station_id}-{sensor.name}"
+        identity = station.entity_station_id if station.entity_station_id is not None else station.station_id
+        quantity = quantity_key(sensor, station)
+        self._attr_unique_id = f"{identity}-{quantity}"
         self._attr_device_info = DeviceInfo(
-            name=f"Weatherstation {station.station_id}",
-            identifiers={(DOMAIN, station.station_id)},
+            name="Weatherstation",
+            identifiers={(DOMAIN, identity)},
             sw_version=station.station_sw_version,
-            manufacturer=getattr(station.vendor, "value", str(station.vendor)),
         )
-        self._attr_available = (station.update_time is not None) and (
-            (station.update_time + 5 * 60) > time.monotonic())
+        self._attr_available = True
+        self._expiry: asyncio.TimerHandle | None = None
 
 
 class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
@@ -54,17 +67,38 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         super().__init__(sensor, station)
         self._attr_name = name
         self._attr_native_value = sensor.value if sensor else None
-        description = UNIT_DESCRIPTION_MAPPING.get(sensor.unit)
-        if description is None:
-            for key, val in UNIT_DESCRIPTION_MAPPING.items():
-                try:
-                    if str(key) == sensor.unit:
-                        description = val
-                        break
-                except Exception:
-                    continue
-        if description is not None:
-            self.entity_description = description
+        self.entity_description = QUANTITY_DESCRIPTIONS[quantity_key(sensor, station)]
+        semantic_names = {
+            "rain_1h": "Rain past 60 minutes",
+            "rain_intensity": "Rain intensity",
+            "irradiance": "Solar irradiance",
+        }
+        self._attr_name = semantic_names.get(quantity_key(sensor, station), name)
+        if sensor.name == "dailyrain":
+            self._attr_name = "Daily precipitation"
+
+    def cancel_expiry(self) -> None:
+        """Release the per-field timer on unload/removal."""
+        if self._expiry is not None:
+            self._expiry.cancel()
+            self._expiry = None
+
+    def refresh_expiry(self, timeout: float) -> None:
+        """Only a fresh selected-source field may renew availability."""
+        self.cancel_expiry()
+        self._attr_available = True
+
+        def expire() -> None:
+            self._expiry = None
+            self._attr_available = False
+            self.async_write_ha_state()
+
+        self._expiry = asyncio.get_running_loop().call_later(timeout, expire)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel the field timer when HA removes this entity."""
+        self.cancel_expiry()
+        await super().async_will_remove_from_hass()
 
     async def update_sensor(self, station: WeatherStation) -> None:
         """Update the entity."""
@@ -76,8 +110,6 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         self.sensor = new_sensor
 
         self._attr_native_value = self.sensor.value if self.sensor else None
-        self._attr_available = (station.update_time is not None) and (
-            (station.update_time + 5 * 60) > time.monotonic())
 
         _LOGGER.debug("Updating %s [%s] with update time %s",
                       self.unique_id, self.sensor, self.station.update_time)

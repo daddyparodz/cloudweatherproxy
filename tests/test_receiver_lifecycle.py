@@ -28,7 +28,7 @@ PATHS = [
 ]
 
 
-def make_entry():
+def make_entry(sensor_source="wunderground"):
     """Create a real config entry containing only synthetic local-test data."""
     return ConfigEntry(
         domain=DOMAIN,
@@ -37,6 +37,7 @@ def make_entry():
             "weatherunderground_proxy": False,
             "weathercloud_proxy": False,
             "dns_servers": "192.0.2.1",
+            "sensor_source": sensor_source,
         },
         options={},
         source="user",
@@ -79,7 +80,9 @@ async def receiver(tmp_path, monkeypatch, request):
         return await handler(request)
 
     hass.http.app.middlewares.append(auth)
-    entry = make_entry()
+    path = getattr(request.node, "callspec", None)
+    path = path.params.get("path") if path else None
+    entry = make_entry("weathercloud" if path == PATHS[1] else "wunderground")
     assert await async_setup_entry(hass, entry)
     client = TestClient(TestServer(hass.http.app))
     if getattr(request, "param", True):

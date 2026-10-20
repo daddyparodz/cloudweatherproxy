@@ -3,9 +3,9 @@
 from typing import Any
 from homeassistant.core import HomeAssistant
 
-from . import CloudWeatherProxyConfigEntry, DomainData
-from .entity import CloudWeatherEntity
-from .const import DOMAIN, CONF_WUNDERGROUND_PROXY, CONF_WEATHERCLOUD_PROXY, CONF_DNS_SERVERS
+from . import CloudWeatherProxyConfigEntry
+from .entity import quantity_key
+from .const import DOMAIN, CONF_WUNDERGROUND_PROXY, CONF_WEATHERCLOUD_PROXY
 from .web import WeathercloudReceiver, WundergroundReceiver
 
 
@@ -13,54 +13,19 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWe
     """Return config entry diagnostics."""
 
     runtime_data = entry.runtime_data
-    known_sensors: dict[str, CloudWeatherEntity] = runtime_data.known_sensors
-
-    # Get the per-HASS log queue from domain-wide data
-    logs = []
-    if DOMAIN in hass.data:
-        domain_data: DomainData = hass.data[DOMAIN]
-        log_queue = domain_data.log_queue
-        if log_queue:
-            # Access underlying deque of asyncio.Queue
-            items = list(getattr(log_queue, "_queue", []))
-            logs = items[-100:]
-
-    # Format known_sensors for human readability with masked station IDs
-    # Create a mapping of station IDs to unique identifiers to prevent collisions
-    station_id_mapping: dict[str, str] = {}
-    station_counter = 1
-
-    formatted_sensors = {}
-    for unique_id, entity in known_sensors.items():
-        station_id = entity.station.station_id
-        if station_id not in station_id_mapping:
-            station_id_mapping[station_id] = f"station_{station_counter}"
-            station_counter += 1
-
-        masked_key = unique_id.replace(
-            station_id, station_id_mapping[station_id], 1)
-
-        formatted_sensors[masked_key] = {
-            "name": entity.name,
-            "sensor_name": entity.sensor.name if entity.sensor else None,
-            "value": entity.sensor.value if entity.sensor else None,
-            "unit": entity.sensor.unit if entity.sensor else None,
+    listener = runtime_data.listener
+    formatted_sensors = {
+        f"sensor_{index}": {
+            "quantity": quantity_key(entity.sensor, entity.station),
+            "unit": entity.native_unit_of_measurement,
             "available": entity.available,
-            "enabled": entity.enabled,
         }
-
-    # Apply masking to logs
-    masked_logs = []
-    for log in logs:
-        masked_log = log
-        for station_id, masked_id in station_id_mapping.items():
-            masked_log = masked_log.replace(station_id, masked_id)
-        masked_logs.append(masked_log)
-
+        for index, entity in enumerate(runtime_data.known_sensors.values(), 1)
+        if entity.sensor is not None
+    }
     formatted_entry_data = {
         "proxy_wunderground": entry.data.get(CONF_WUNDERGROUND_PROXY, False),
         "proxy_weathercloud": entry.data.get(CONF_WEATHERCLOUD_PROXY, False),
-        "dns_servers": entry.data.get(CONF_DNS_SERVERS, ""),
     }
 
     return {
@@ -77,9 +42,18 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWe
             "accepting": hass.data[DOMAIN].receiver.accepting,
             "in_flight": hass.data[DOMAIN].receiver.in_flight,
         },
+        "sensor_source": {
+            "implementation": "sensorsource.1",
+            "selected": listener.sensor_source,
+            **listener.sensor_settings,
+            "trusted_proxy_count": len(listener.trusted_sensor_proxies),
+            **listener.source_counters,
+        },
         "known_sensors": formatted_sensors,
         "entry_data": formatted_entry_data,
         "logs": {
-            "recent": masked_logs,
+            # Historical exception text can contain arbitrary credential formats.
+            "recent": [],
+            "omitted_for_privacy": True,
         },
     }

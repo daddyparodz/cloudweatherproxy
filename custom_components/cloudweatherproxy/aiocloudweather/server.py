@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 import logging
 import time
 from typing import Any, get_type_hints
@@ -11,8 +12,9 @@ from dataclasses import fields
 
 from aiohttp import web, ClientResponse
 
+from ..source import request_address, station_identity
 from .proxy import CloudWeatherProxy, DataSink
-from .utils import cast_value
+from .utils import resolve_caster
 from .station import (
     WundergroundRawSensor,
     WeathercloudRawSensor,
@@ -56,6 +58,18 @@ class CloudWeatherListener:
             Callable[[WeatherStation], Coroutine[Any, Any, Any]]
         ] = []
 
+        self.sensor_source = "wunderground"
+        self.sensor_settings = {
+            "timeout_seconds": 900,
+            "physical_binding_configured": False,
+            "legacy_binding_enabled": False,
+        }
+        self.trusted_sensor_proxies: set[str] = set()
+        self.source_counters = {
+            "selected_packets": 0, "unselected_packets": 0,
+            "identity_rejected": 0, "collision_rejected": 0,
+            "accepted_fields": 0,
+        }
         # storage
         self.stations: list[str] = []
 
@@ -100,18 +114,18 @@ class CloudWeatherListener:
             if "arg" in f.metadata
         }
         type_hints = get_type_hints(WundergroundRawSensor)
-        instance_data = {}
+        instance_data: dict[str, Any] = {"station_id": "", "station_key": ""}
 
         for arg, field in dfields.items():
             if arg in data:
                 value = data[arg]
                 try:
-                    instance_data[field.name] = cast_value(
-                        type_hints[field.name], value)
-                except (ValueError, TypeError) as err:
-                    _LOGGER.warning(
-                        "Failed to cast field %s value '%s': %s", field.name, value, err
-                    )
+                    parsed = resolve_caster(type_hints[field.name])(value)
+                    if isinstance(parsed, (int, float)) and not isfinite(parsed):
+                        continue
+                    instance_data[field.name] = parsed
+                except (ValueError, TypeError, OverflowError):
+                    _LOGGER.warning("Invalid sensor field: %s", field.name)
 
         return WeatherStation.from_wunderground(WundergroundRawSensor(**instance_data))
 
@@ -125,19 +139,18 @@ class CloudWeatherListener:
             if "arg" in f.metadata
         }
         type_hints = get_type_hints(WeathercloudRawSensor)
-        instance_data = {}
+        instance_data: dict[str, Any] = {"station_id": "", "station_key": ""}
 
         for arg, field in dfields.items():
             if arg in data:
                 value = data[arg]
                 try:
-                    instance_data[field.name] = cast_value(
-                        type_hints[field.name], value)
-                except (ValueError, TypeError) as err:
-
-                    _LOGGER.warning(
-                        "Failed to cast field %s value '%s': %s", field.name, value, err
-                    )
+                    parsed = resolve_caster(type_hints[field.name])(value)
+                    if isinstance(parsed, (int, float)) and not isfinite(parsed):
+                        continue
+                    instance_data[field.name] = parsed
+                except (ValueError, TypeError, OverflowError):
+                    _LOGGER.warning("Invalid sensor field: %s", field.name)
 
         return WeatherStation.from_weathercloud(WeathercloudRawSensor(**instance_data))
 
@@ -169,12 +182,7 @@ class CloudWeatherListener:
         assert dataset is not None
         assert station_id is not None
 
-        if station_id not in self.stations:
-            _LOGGER.debug("Found new station: %s", station_id)
-            self.stations.append(station_id)
-
-        self.last_updates[station_id] = time.monotonic()
-        dataset.update_time = self.last_updates[station_id]
+        dataset.update_time = time.monotonic()
 
         # The User-Agent is the only recognizable information we have aside from the IP
         # In case of the station at hand it just shows lwIP/2.1.2 of their IP stack
@@ -182,16 +190,12 @@ class CloudWeatherListener:
         if user_agent:
             dataset.station_sw_version = user_agent
 
-        # Extract client IP from request just in case
-        if "X-Real-IP" in request.headers:
-            dataset.station_client_ip = request.headers["X-Real-IP"]
-        else:
-            dataset.station_client_ip = request.remote or ""
+        dataset.station_client_ip = request_address(request, self.trusted_sensor_proxies)
 
         try:
             await self._new_dataset_cb(dataset)
         except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.warning("CloudWeather new dataset callback error: %s", err)
+            _LOGGER.warning("CloudWeather new dataset callback error: %s", type(err).__name__)
 
         if self.proxy and sink is not None:
             if sink not in self.proxy.proxied_sinks:
@@ -206,10 +210,8 @@ class CloudWeatherListener:
             else:
                 try:
                     response: ClientResponse = await self.proxy.forward(sink, request)
-                    body = await response.text()
-                    _LOGGER.debug(
-                        "CloudWeather proxy response[%d]: %s", response.status, body
-                    )
+                    await response.read()
+                    _LOGGER.debug("CloudWeather proxy response[%d]", response.status)
 
                     if response.status >= 400:
                         raise RuntimeError(
@@ -219,10 +221,17 @@ class CloudWeatherListener:
                     _LOGGER.warning(
                         "CloudWeather proxy error for %s: %s",
                         sink,
-                        err,
+                        type(err).__name__,
                     )
 
-        self.last_values[station_id] = deepcopy(dataset)
+        # A protocol/address namespace is mandatory even for empty credentials.
+        # Never use the physical cross-protocol association for wire caches.
+        cache_key = station_identity(dataset, None, False)
+        if cache_key is not None:
+            self.last_values[cache_key] = deepcopy(dataset)
+            self.last_updates[cache_key] = dataset.update_time
+            if cache_key not in self.stations:
+                self.stations.append(cache_key)
         return web.Response(text="OK")
 
     async def start(self) -> None:

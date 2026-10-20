@@ -2,34 +2,57 @@
   "config": {
     "step": {
       "user": {
-        "description": "All data forwarded to Home Assistant is processed. Optionally you can forward the data to their intended data sink. Please select for which services you want to enable this feature",
+        "description": "Only the selected source creates and updates Home Assistant sensors. Cloud forwarding is independent. Advanced identity settings require verified physical station and proxy addresses.",
         "data": {
           "weatherunderground_proxy": "Proxy Weather Underground",
           "weathercloud_proxy": "Proxy Weathercloud",
-          "dns_servers": "DNS Servers"
+          "dns_servers": "DNS Servers",
+          "sensor_source": "Sensor source",
+          "sensor_timeout": "Sensor availability timeout (seconds)",
+          "trusted_sensor_proxies": "Advanced: trusted sensor proxy IP addresses",
+          "anonymous_station_address": "Advanced: physical station IP binding",
+          "legacy_anonymous_binding": "Advanced: associate the bound station with the legacy anonymous device"
         },
         "data_description": {
-          "dns_servers": "DNS Servers used for looking up the actual IPs of the domains. Can be a comma separated list of IPs."
+          "dns_servers": "Comma-separated DNS server IP addresses used for cloud forwarding.",
+          "sensor_source": "Wunderground or Weathercloud. No automatic fallback or first-packet selection.",
+          "sensor_timeout": "Default 900 seconds accommodates Weathercloud’s 10-minute interval. Missing fields expire independently.",
+          "trusted_sensor_proxies": "Comma-separated numeric transport-peer IPs. Empty trusts no forwarding headers. Only one numeric X-Forwarded-For hop is accepted. Authentication is unchanged.",
+          "anonymous_station_address": "Optional numeric IP representing exactly one physical station. Required for blank IDs and cross-protocol identity continuity.",
+          "legacy_anonymous_binding": "Only enable after verifying that the existing anonymous device is the bound station. Rain and irradiance get new entities. History is not rewritten."
         }
       },
       "reconfigure": {
-        "description": "All data forwarded to Home Assistant is processed. Optionally you can forward the data to their intended data sink. Please select for which services you want to enable this feature",
+        "description": "Only the selected source creates and updates Home Assistant sensors. Cloud forwarding is independent. Advanced identity settings require verified physical station and proxy addresses.",
         "data": {
           "weatherunderground_proxy": "Proxy Weather Underground",
           "weathercloud_proxy": "Proxy Weathercloud",
-          "dns_servers": "DNS Servers"
+          "dns_servers": "DNS Servers",
+          "sensor_source": "Sensor source",
+          "sensor_timeout": "Sensor availability timeout (seconds)",
+          "trusted_sensor_proxies": "Advanced: trusted sensor proxy IP addresses",
+          "anonymous_station_address": "Advanced: physical station IP binding",
+          "legacy_anonymous_binding": "Advanced: associate the bound station with the legacy anonymous device"
         },
         "data_description": {
-          "dns_servers": "DNS Servers used for looking up the actual IPs of the domains. Can be a comma separated list of IPs."
+          "dns_servers": "Comma-separated DNS server IP addresses used for cloud forwarding.",
+          "sensor_source": "Wunderground or Weathercloud. No automatic fallback or first-packet selection.",
+          "sensor_timeout": "Default 900 seconds accommodates Weathercloud’s 10-minute interval. Missing fields expire independently.",
+          "trusted_sensor_proxies": "Comma-separated numeric transport-peer IPs. Empty trusts no forwarding headers. Only one numeric X-Forwarded-For hop is accepted. Authentication is unchanged.",
+          "anonymous_station_address": "Optional numeric IP representing exactly one physical station. Required for blank IDs and cross-protocol identity continuity.",
+          "legacy_anonymous_binding": "Only enable after verifying that the existing anonymous device is the bound station. Rain and irradiance get new entities. History is not rewritten."
         }
       }
     },
     "create_entry": {
-      "default": "To finish setting up the integration, please follow the guide from the README in regards on how to setup the DNS and HTTP server.\n\nThe destination address for HomeAssistant is `https://{address}:{port}`."
+      "default": "To finish setting up the integration, please follow the README for DNS and HTTP configuration.\n\nThe Home Assistant destination is `https://{address}:{port}`."
     },
     "abort": {
-      "single_instance": "Only a single instance can run at the same time as they occupy the same paths.",
-      "reconfigure_successful": "The configuration has been updated. The changes are live immediately."
+      "single_instance": "Only one instance can use the receiver paths.",
+      "reconfigure_successful": "The configuration has been saved and the integration will reload."
+    },
+    "error": {
+      "invalid_sensor_config": "Choose a supported source, timeout from 1 to 86400 seconds, numeric IP addresses, and an explicit station binding before enabling legacy association."
     }
   }
 }

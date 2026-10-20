@@ -45,7 +45,7 @@ class CloudWeatherProxy:
         url = (
             f"https://rtupdate.wunderground.com/weatherstation/updateweatherstation.php?{query_string}"
         )
-        _LOGGER.debug("Forwarding Wunderground data: %s", url)
+        _LOGGER.debug("Forwarding Wunderground data")
         return await self.session.get(url)
 
     async def forward_weathercloud(self, request: web.Request) -> ClientResponse:
@@ -66,7 +66,7 @@ class CloudWeatherProxy:
             pairs = parse_qsl(request.query_string, keep_blank_values=True)
             query_string = urlencode(pairs, doseq=True)
             url = f"{url}?{query_string}"
-        _LOGGER.debug("Forwarding WeatherCloud data: %s", url)
+        _LOGGER.debug("Forwarding WeatherCloud data")
         return await self.session.get(url)
 
     async def forward(self, sink: DataSink, request: web.Request) -> ClientResponse:
