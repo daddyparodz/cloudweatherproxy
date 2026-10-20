@@ -65,7 +65,7 @@ async def receiver(tmp_path, monkeypatch, request):
     )
 
     async def forward(entry, platforms):
-        await sensor.async_setup_entry(hass, entry, lambda entities: None)
+        await sensor.async_setup_entry(hass, entry, writes.extend)
 
     async def unload(entry, platforms):
         await entry._async_process_on_unload(hass)

@@ -1,6 +1,6 @@
 # Sensor source and physical units (`sensorsource.1`)
 
-This feature does not choose which protocol your particular station implements correctly. Select **Wunderground** or **Weathercloud** explicitly in the integration's **Reconfigure** form. In Italian the field is **Sorgente dei sensori**. The selection is global for the integration, not per station. There is no automatic fallback and arrival order never selects the sensor source.
+Select **Wunderground** or **Weathercloud** explicitly in **Reconfigure**. The selection is global, not per station. There is no automatic fallback or first-packet selection.
 
 Both receiver routes remain active. **Proxy Weather Underground** and **Proxy Weathercloud** still independently control forwarding to each cloud service. Discarding a packet for HA sensor identity/source does not discard its cloud forwarding. Authentication and the HTTP reload lifecycle are unchanged.
 
@@ -32,14 +32,14 @@ Metadata is chosen by semantic quantity and checked against the canonical incomi
 |---|---|---|---|
 | WU `rainin` | Rain past 60 minutes / `rain_1h` | mm, inches × 25.4 | `measurement` |
 | WC `rainrate` | Rain intensity / `rain_intensity` | mm/h, encoded value ÷ 10 | `measurement` |
-| WU `dailyrainin` | Daily precipitation / `wunderground_dailyrain` | mm, inches × 25.4 | `total_increasing` |
-| WC `rain` | Daily precipitation / `weathercloud_dailyrain` | mm, encoded value ÷ 10 | `total_increasing` |
+| WU `dailyrainin` | Daily Rain / `dailyrain` | mm, inches × 25.4 | `total_increasing` |
+| WC `rain` | Daily Rain / `dailyrain` | mm, encoded value ÷ 10 | `total_increasing` |
 | WU lowercase `solarradiation` | Solar irradiance / `irradiance` | W/m², unchanged | `measurement` |
 | WC `solarrad` | Solar irradiance / `irradiance` | W/m², encoded value ÷ 10 | `measurement` |
 
 Temperature is native °C, pressure hPa, wind speed m/s, humidity %, directions degrees and UV a dimensionless index. WU fractional UV values are retained; WC UV tenths are decoded. HA display units can differ from these native units. In the tested HA version the metric wind default is km/h and US customary pressure default is psi; compatible registry options can select alternatives.
 
-WU `rainin` is a rolling **amount**, not an instantaneous intensity. It can fall as rain leaves the past-hour window, so it is not `total_increasing`. It is never equated with WC rain rate. The two daily-counter series remain separate even for an explicitly bound station. No guessed offsets, cross-protocol counter continuity, synthetic resets or rain multipliers are applied. WC's documented daily meaning does not establish that a particular firmware sends the documented quantity correctly.
+WU `rainin` is a rolling **amount**, not instantaneous intensity, and uses `measurement` because it can decrease. It is never equated with WC rain rate. Daily, weekly and monthly counter identities retain the upstream suffixes; changing source does not guarantee counter continuity or matching reset times. No offsets, synthetic resets or rain multipliers are applied.
 
 WU camel-case `solarRadiation` has **no verified device-specific unit contract** here. It is ignored for HA entities and forwarded unchanged when enabled. It is not interpreted as lux, multiplied by 1000, treated as an alias of lowercase `solarradiation`, or converted to W/m². No lux source is currently supported, and there is no universal lux-to-irradiance conversion. A matching numeric pair across protocols alone does not establish the undocumented field's contract. The old unverified Weathercloud `vis` field is not promoted to a HA quantity.
 
@@ -63,14 +63,14 @@ For a verified legacy anonymous station:
 1. Select the sensor protocol deliberately and configure the verified proxy/physical binding as needed.
 2. Opt into `legacy_anonymous_binding` only after confirming the old anonymous device is that station.
 3. Compatible quantities keep the same unique IDs and device identifier. HA's usual entity-platform registration can reattach those entities without a custom registry migration.
-4. **Do not repurpose** `-rain` (old historical mm despite the Rain Rate label) or `-solarradiation` (old lux history) as mm/h or W/m². New `-rain_1h`/`-rain_intensity` and `-irradiance` entities are intentionally distinct. Daily, weekly and monthly counters also get source-specific suffixes rather than pretending prior mixed-source counter history was clean.
+4. Do not repurpose ambiguous `-rain` or old lux `-solarradiation` history. Rolling amount, intensity and irradiance retain distinct semantic identities. Compatible daily, weekly and monthly counters reuse `dailyrain`, `weeklyrain` and `monthlyrain`, preserving existing entity IDs and custom names. This does not repair historical counter discontinuities.
 5. Old incompatible registry/history records remain untouched and inactive; HA's normal unload/removal behavior makes old runtime entities unavailable. New semantic entities can receive new entity IDs chosen by HA. Existing dashboards/Alexa remain unchanged and may still refer to inactive legacy entities until the owner changes them deliberately.
 
 For an unbound legacy **nonempty** station ID, the old protocol-agnostic identity cannot be proven safe to reuse. New protocol/origin namespaces are intentional. Automatic nonempty-ID registry migration is not implemented.
 
 ## Loaded-code proof and validation scope
 
-The manifest version is `2026.2.1+sensorsource.1`. Diagnostics retain `receiver_lifecycle.implementation = reloadfix.1` and add `sensor_source.implementation = sensorsource.1`, loaded selected source, per-source acceptance/rejection counts, accepted field count, timeout, and binding/trust-presence information. Diagnostics omit raw station IDs, addresses, keys, measurements and historical free-text logs. Counters reset when the listener is recreated.
+The manifest version is `2026.2.1+sensorsource.2`. Diagnostics retain the HTTP and source implementation markers, selected source, acceptance/rejection counts, timeout and binding/trust indicators. Raw IDs, addresses, keys, measurements and free-text logs are omitted. Counters reset on listener recreation.
 
 The isolated tests use real HA 2026.10.2 classes, real `SensorEntity` conversion/registry-option handling, real event-loop timers and ephemeral loopback HTTP forwarding. As in the first intervention, the entity-platform orchestration/state-write seam is substituted; this is not a complete Core/Recorder/frontend boot or a live-installation verification. Source preference and device-specific daily-rain/solar semantics require owner/firmware confirmation.
 

@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def quantity_key(sensor: Sensor, station: WeatherStation) -> str:
-    """Keep incompatible dimensions and unverified counter series separate."""
+    """Describe source semantics independently of compatibility identities."""
     source = "wunderground" if station.vendor.name == "WUNDERGROUND" else "weathercloud"
     if sensor.name == "rain":
         return "rain_1h" if source == "wunderground" else "rain_intensity"
@@ -26,6 +26,21 @@ def quantity_key(sensor: Sensor, station: WeatherStation) -> str:
     if sensor.name == "solarradiation":
         return "irradiance"
     return sensor.name
+
+
+def identity_suffix(sensor: Sensor, station: WeatherStation) -> str:
+    """Preserve upstream counter IDs without letting IDs select metadata.
+
+    A legacy ``rain`` record is not evidence of a single physical quantity:
+    historical versions used it for both depth and intensity. Keep the safe
+    semantic namespace unless independent provenance can establish its type.
+    """
+    if sensor.name in ("dailyrain", "weeklyrain", "monthlyrain"):
+        # Physical identity is resolved before this point. Shared depth units
+        # do not imply equal counter values/reset times when source changes;
+        # never synthesize offsets or attempt history repair here.
+        return sensor.name
+    return quantity_key(sensor, station)
 
 
 class CloudWeatherBaseEntity(Entity):
@@ -43,8 +58,8 @@ class CloudWeatherBaseEntity(Entity):
         self.station = station
 
         identity = station.entity_station_id if station.entity_station_id is not None else station.station_id
-        quantity = quantity_key(sensor, station)
-        self._attr_unique_id = f"{identity}-{quantity}"
+        suffix = identity_suffix(sensor, station)
+        self._attr_unique_id = f"{identity}-{suffix}"
         self._attr_device_info = DeviceInfo(
             name="Weatherstation",
             identifiers={(DOMAIN, identity)},
@@ -75,7 +90,7 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         }
         self._attr_name = semantic_names.get(quantity_key(sensor, station), name)
         if sensor.name == "dailyrain":
-            self._attr_name = "Daily precipitation"
+            self._attr_name = "Daily Rain"
 
     def cancel_expiry(self) -> None:
         """Release the per-field timer on unload/removal."""

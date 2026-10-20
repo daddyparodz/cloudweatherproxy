@@ -69,19 +69,19 @@ async def test_bound_source_change_preserves_only_compatible_quantities(receiver
     wu = PATHS[0] + "&rainin=1&dailyrainin=2&solarradiation=1050"
     await client.get(wu)
     old = {entity.unique_id: entity for entity in entry.runtime_data.known_sensors.values()}
-    assert set(old) == {"-temperature", "-rain_1h", "-wunderground_dailyrain", "-irradiance"}
+    assert set(old) == {"-temperature", "-rain_1h", "-dailyrain", "-irradiance"}
     assert old["-rain_1h"].native_value == 25.4
     assert old["-rain_1h"].state_class == "measurement"
     await reconfigure(receiver, sensor_source="weathercloud")
     await client.get(PATHS[1] + "/rainrate/200/rain/350/solarrad/10500")
     current = {entity.unique_id: entity for entity in entry.runtime_data.known_sensors.values()}
-    assert set(current) == {"-temperature", "-rain_intensity", "-weathercloud_dailyrain", "-irradiance"}
+    assert set(current) == {"-temperature", "-rain_intensity", "-dailyrain", "-irradiance"}
     assert current["-temperature"].native_value == old["-temperature"].native_value == 20
     assert current["-temperature"].device_info == old["-temperature"].device_info
     assert current["-rain_intensity"].native_value == 20
     assert current["-rain_intensity"].device_class == "precipitation_intensity"
     assert current["-rain_intensity"].native_unit_of_measurement == "mm/h"
-    assert current["-weathercloud_dailyrain"].native_value == 35
+    assert current["-dailyrain"].native_value == 35
     assert current["-irradiance"].native_value == 1050
     assert current["-irradiance"].native_unit_of_measurement == "W/m²"
     assert current["-irradiance"].device_class == "irradiance"
@@ -335,7 +335,8 @@ async def test_legacy_registry_records_and_names_untouched(receiver, monkeypatch
         assert registry.async_get(item.entity_id) is item
     ids = set(entry.runtime_data.known_sensors)
     assert "-temperature" in ids
-    assert ids.isdisjoint({"-rain", "-solarradiation", "-dailyrain"})
+    assert "-dailyrain" in ids
+    assert ids.isdisjoint({"-rain", "-solarradiation"})
     metadata = {key: (entity.device_class, entity.native_unit_of_measurement, entity.state_class) for key, entity in entry.runtime_data.known_sensors.items()}
     await reconfigure(receiver)
     await client.get(PATHS[0] + "&rainin=0.5&dailyrainin=3&solarradiation=90")

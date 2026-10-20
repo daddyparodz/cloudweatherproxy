@@ -45,7 +45,7 @@ Real HA `SensorEntity` conversion tests were added before evaluating their outpu
 - Eight source/forwarding-flag combinations use the real proxy dispatch/URL construction and real loopback HTTP I/O. Only the outbound destination is redirected to an ephemeral local server.
 - Actual timer expiration without further packets; omitted fields and unselected traffic do not refresh it; valid return restores availability; unload cancels timers.
 - Named multi-station isolation, blank/whitespace IDs, exact nonempty token preservation, duplicate/colliding identities, trusted/untrusted/duplicate/multiple-hop/malformed XFF, unsupported forwarding headers.
-- Explicit physical association preserves compatible anonymous IDs/device identity across source changes; incompatible rain dimensions and source-specific counters remain distinct.
+- Explicit physical association preserves compatible anonymous IDs/device identity across source changes; incompatible rain dimensions remain distinct. Real entity-platform tests verify upstream counter-ID reattachment and custom-name preservation.
 - Existing registry records and custom names remain untouched. Registry mutation/removal methods fail the test if integration callbacks invoke them.
 - Metadata remains stable after listener recreation/reload. Official WC scaling examples, WU rolling rain and lowercase irradiance, fractional UV and nonfinite/invalid/missing values are covered.
 - Real config-flow creation/reconfigure schemas, target HA form serialization, validation, actual entry-data updates and reload scheduling are exercised. Full Core reload scheduling itself is substituted in the flow test; the original lifecycle suite separately crosses real HA entry-state boundaries.

@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CloudWeatherProxyConfigEntry
-from .entity import CloudWeatherEntity, quantity_key
+from .entity import CloudWeatherEntity, identity_suffix, quantity_key
 from .const import QUANTITY_DESCRIPTIONS
 from .source import numeric_address, station_identity
 from .aiocloudweather.station import WeatherstationVendor
@@ -101,7 +101,7 @@ async def async_setup_entry(
             if description is None or sensor.unit != expected_unit:
                 continue
             counters["accepted_fields"] += 1
-            unique_id = f"{identity}-{quantity}"
+            unique_id = f"{identity}-{identity_suffix(sensor, station)}"
 
             if unique_id in known_sensors:
                 known_sensors[unique_id].refresh_expiry(timeout)
@@ -117,8 +117,6 @@ async def async_setup_entry(
         if len(new_sensors) > 0:
             _LOGGER.debug("Adding %d sensors", len(new_sensors))
             async_add_entities(new_sensors)
-        for nsensor in new_sensors:
-            nsensor.async_write_ha_state()
 
     cloudweather.new_dataset_cb.append(_new_dataset)
     entry.async_on_unload(
