@@ -14,5 +14,5 @@
   "requirements": [
     "aiodns>=3.5.0"
   ],
-  "version": "2025.12.0"
+  "version": "2026.2.1+reloadfix.1"
 }

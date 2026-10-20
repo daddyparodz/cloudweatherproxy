@@ -1,0 +1,7 @@
+# Linux, Python 3.14. Isolated current-HA regression environment.
+# Do not combine with requirements.txt: its HA 2025.12 and pycares<5 pins conflict.
+homeassistant==2026.10.2
+pytest==9.1.1
+pytest-aiohttp==1.1.1
+pytest-asyncio==1.4.0
+ruff>=0.12,<=0.20
