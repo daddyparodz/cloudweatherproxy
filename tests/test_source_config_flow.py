@@ -21,7 +21,7 @@ async def test_source_form_exposes_independent_choice_and_safe_defaults(receiver
     serialized = probatio.to_field_list(form["data_schema"], custom_serializer=cv.custom_serializer)
     assert {item["name"] for item in serialized} >= {"sensor_source", "sensor_timeout", "trusted_sensor_proxies", "anonymous_station_address"}
     source_field = next(item for item in serialized if item["name"] == "sensor_source")
-    assert source_field["options"] == [("wunderground", "Wunderground"), ("weathercloud", "Weathercloud")]
+    assert source_field["options"] == [("wunderground", "Wunderground"), ("weathercloud", "Weathercloud"), ("combined", "Wunderground + Weathercloud")]
     data = form["data_schema"]({"weatherunderground_proxy": False, "weathercloud_proxy": True})
     assert data["sensor_source"] == "wunderground"
     assert data["sensor_timeout"] >= 900

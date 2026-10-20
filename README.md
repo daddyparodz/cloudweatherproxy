@@ -29,6 +29,47 @@ Optionally the weather data can be passed to its indended destination.
 | -------- | ----------------------------------- |
 | `sensor` | Show info from weather station API. |
 
+## Bound combined sensor profile
+
+In the existing sensor-source selector, **Wunderground + Weathercloud** explicitly
+selects `sensor_source: combined`. It requires the existing numeric physical
+station address binding; only traffic verified against that address can contribute.
+Use the existing trusted-proxy setting only for an explicitly trusted single hop.
+The two cloud-forwarding switches remain independent of sensor selection.
+
+Fixed owners (see `source.py`) never change on packet arrival, missing fields or
+expiry:
+
+- Wunderground: outdoor temperature/humidity/dewpoint, pressure, wind and gusts,
+  rolling past-60-minute rain depth, daily/weekly/monthly rain counters.
+- Weathercloud: indoor temperature/humidity, heat index (including indoor when
+  transmitted), UV, solar radiation in W/m², and current Rain Rate in mm/h.
+
+Weathercloud daily rain is deliberately excluded from this profile. No offsets,
+last-packet-wins merge or missing-source fallback are used. Each accepted finite,
+correctly dimensioned owner field renews only its own timeout (default 900 seconds).
+The single-source selections retain their strict protocol filtering.
+
+Rain Rate has the distinct `rain_intensity` unique-ID suffix; past-hour depth uses
+`rain_1h`, or a dimensionally compatible explicitly bound legacy `rain` registry
+record. Daily rain retains `dailyrain`. Solar radiation uses `irradiance`, never the
+old mixed-unit `solarradiation` series. Existing custom names/renamed entity IDs
+remain registry-owned. This integration does not rename, delete, repair or purge
+registry records, history or statistics.
+
+Loaded diagnostics expose `sensor_source.selected`,
+`ownership_implementation: combined.1`, `quantity_owners`, and
+`protocol_accepted_fields`. These provide a privacy-safe loaded-policy/acceptance
+contract, not proof that the console transmits every display item. Counts contain
+no identifiers, addresses, credentials or measurements.
+
+Coverage limits: no console Feels Like formula is invented; sunrise, sunset and
+forecast are not mirrored. Rain Rate is the transmitted rate, not a synthesized
+instantaneous derivative of the rolling-hour depth. Pressure absolute-versus-relative
+reference remains unconfirmed; existing pressure metadata is unchanged. No lux
+conversion is inferred from the console's selectable light display units, and the
+undocumented camel-case Wunderground solar field remains ignored.
+
 ## Installation
 
 

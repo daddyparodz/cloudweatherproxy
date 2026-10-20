@@ -5,6 +5,7 @@ from homeassistant.core import HomeAssistant
 
 from . import CloudWeatherProxyConfigEntry
 from .entity import quantity_key
+from .source import COMBINED_OWNERS
 from .const import DOMAIN, CONF_WUNDERGROUND_PROXY, CONF_WEATHERCLOUD_PROXY
 from .web import WeathercloudReceiver, WundergroundReceiver
 
@@ -44,6 +45,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWe
         },
         "sensor_source": {
             "implementation": "sensorsource.1",
+            "ownership_implementation": "combined.1",
+            "quantity_owners": COMBINED_OWNERS if listener.sensor_source == "combined" else {},
+            "protocol_accepted_fields": listener.protocol_accepted_fields,
             "selected": listener.sensor_source,
             **listener.sensor_settings,
             "trusted_proxy_count": len(listener.trusted_sensor_proxies),

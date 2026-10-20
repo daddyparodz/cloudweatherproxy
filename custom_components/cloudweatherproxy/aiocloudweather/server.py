@@ -59,6 +59,7 @@ class CloudWeatherListener:
         ] = []
 
         self.sensor_source = "wunderground"
+        self.protocol_accepted_fields: dict[str, int] = {"wunderground": 0, "weathercloud": 0}
         self.sensor_settings = {
             "timeout_seconds": 900,
             "physical_binding_configured": False,

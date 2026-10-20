@@ -227,7 +227,7 @@ async def test_quantity_metadata_rejects_incompatible_native_units(receiver):
     assert irradiance.native_unit_of_measurement == "W/m²"
 
 
-@pytest.mark.parametrize("source", ["wunderground", "weathercloud"])
+@pytest.mark.parametrize("source", ["wunderground", "weathercloud", "combined"])
 @pytest.mark.parametrize("flags", [(False, False), (True, False), (False, True), (True, True)])
 async def test_forwarding_is_independent_real_loopback_io(receiver, monkeypatch, aiohttp_server, source, flags, caplog):
     """Verify forwarding is independent real loopback io."""
@@ -236,7 +236,7 @@ async def test_forwarding_is_independent_real_loopback_io(receiver, monkeypatch,
     from yarl import URL
 
     hass, entry, client, writes = receiver
-    await reconfigure(receiver, sensor_source=source, weatherunderground_proxy=flags[0], weathercloud_proxy=flags[1])
+    await reconfigure(receiver, sensor_source=source, anonymous_station_address="127.0.0.1", weatherunderground_proxy=flags[0], weathercloud_proxy=flags[1])
     seen = []
     async def upstream(request):
         seen.append(request.query["source"])
@@ -256,7 +256,7 @@ async def test_forwarding_is_independent_real_loopback_io(receiver, monkeypatch,
     for index, path in enumerate(PATHS):
         writes.clear()
         assert (await client.get(path)).status == 200
-        assert bool(writes) is (index == (0 if source == "wunderground" else 1))
+        assert bool(writes) is (index == (0 if source in ("wunderground", "combined") else 1))
     assert seen == [name for flag, name in zip(flags, ("wunderground", "weathercloud")) if flag]
     messages = "\n".join(record.getMessage() for record in caplog.records if record.name.startswith("custom_components.cloudweatherproxy"))
     assert "PASSWORD=" not in messages and "/key/" not in messages

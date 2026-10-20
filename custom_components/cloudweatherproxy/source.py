@@ -3,6 +3,20 @@ from hashlib import sha256
 from ipaddress import ip_address
 import json
 
+# Explicit quantity ownership for the bound YT60233 profile. Unknown quantities
+# are excluded; absence/expiry never transfers ownership to another protocol.
+COMBINED_OWNERS = {
+    **dict.fromkeys(("temperature", "humidity", "dewpoint", "barometer",
+                     "absbarometer", "windspeed", "windgustspeed", "winddirection",
+                     "windgustdirection", "windspeedavg", "winddirectionavg",
+                     "windgustspeed10m", "windgustdirection10m", "rain_1h",
+                     "wunderground_dailyrain", "wunderground_weeklyrain",
+                     "wunderground_monthlyrain"), "wunderground"),
+    **dict.fromkeys(("indoortemperature", "indoorhumidity", "heatindex",
+                     "heatindexindoor", "uv", "irradiance", "rain_intensity"),
+                    "weathercloud"),
+}
+
 
 def numeric_address(value: str) -> str:
     """Validate a numeric address; never resolve hostnames."""

@@ -39,7 +39,7 @@ def configuration_schema(current: dict | None = None) -> vol.Schema:
         vol.Required(CONF_WUNDERGROUND_PROXY, default=current.get(CONF_WUNDERGROUND_PROXY, False)): bool,
         vol.Required(CONF_WEATHERCLOUD_PROXY, default=current.get(CONF_WEATHERCLOUD_PROXY, False)): bool,
         vol.Optional(CONF_DNS_SERVERS, default=current.get(CONF_DNS_SERVERS, "9.9.9.9")): str,
-        vol.Required("sensor_source", default=current.get("sensor_source", "wunderground")): vol.In({"wunderground": "Wunderground", "weathercloud": "Weathercloud"}),
+        vol.Required("sensor_source", default=current.get("sensor_source", "wunderground")): vol.In({"wunderground": "Wunderground", "weathercloud": "Weathercloud", "combined": "Wunderground + Weathercloud"}),
         vol.Required("sensor_timeout", default=current.get("sensor_timeout", 900)): vol.All(int, vol.Range(min=1, max=86400)),
         vol.Optional("trusted_sensor_proxies", default=current.get("trusted_sensor_proxies", "")): str,
         vol.Optional("anonymous_station_address", default=current.get("anonymous_station_address", "")): str,
@@ -52,7 +52,7 @@ def validate_configuration(data: dict) -> dict:
     result = configuration_schema()(data)
     result["trusted_sensor_proxies"] = _proxies(result["trusted_sensor_proxies"])
     result["anonymous_station_address"] = _address(result["anonymous_station_address"])
-    if result["legacy_anonymous_binding"] and not result["anonymous_station_address"]:
+    if (result["legacy_anonymous_binding"] or result["sensor_source"] == "combined") and not result["anonymous_station_address"]:
         raise vol.Invalid("An explicit station binding is required")
     return result
 

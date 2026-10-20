@@ -90,8 +90,8 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         self.entity_description = QUANTITY_DESCRIPTIONS[quantity_key(sensor, station)]
         semantic_names = {
             "rain_1h": "Rain past 60 minutes",
-            "rain_intensity": "Rain intensity",
-            "irradiance": "Solar irradiance",
+            "rain_intensity": "Rain Rate",
+            "irradiance": "Solar Radiation",
         }
         self._attr_name = semantic_names.get(quantity_key(sensor, station), name)
         if sensor.name == "dailyrain":

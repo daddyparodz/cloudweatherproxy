@@ -1,6 +1,6 @@
 # Sensor source and physical units (`sensorsource.1`)
 
-Select **Wunderground** or **Weathercloud** explicitly in **Reconfigure**. The selection is global, not per station. There is no automatic fallback or first-packet selection.
+Select **Wunderground**, **Weathercloud**, or **Wunderground + Weathercloud** in **Reconfigure**. Strict modes use one protocol; combined mode uses the fixed quantity owners documented in the README and requires an explicit physical binding. There is no automatic fallback or first-packet selection.
 
 Both receiver routes remain active. **Proxy Weather Underground** and **Proxy Weathercloud** still independently control forwarding to each cloud service. Discarding a packet for HA sensor identity/source does not discard its cloud forwarding. Authentication and the HTTP reload lifecycle are unchanged.
 
@@ -8,7 +8,7 @@ Both receiver routes remain active. **Proxy Weather Underground** and **Proxy We
 
 | Entry setting | Default | Meaning |
 |---|---|---|
-| `sensor_source` | `wunderground` | `wunderground` or `weathercloud`, independently of both proxy flags. Old entries without this setting use the deterministic Wunderground default until explicitly reconfigured. |
+| `sensor_source` | `wunderground` | `wunderground`, `weathercloud` or `combined`, independently of both proxy flags. Old entries retain the Wunderground default until explicitly reconfigured. |
 | `sensor_timeout` | `900` | Seconds without a fresh valid value before **that field** becomes unavailable. Allowed range 1–86400. Use at least 900 seconds for Weathercloud's usual ten-minute cadence; allow more for packet loss. |
 | `trusted_sensor_proxies` | empty | Comma-separated numeric IP allowlist of the actual TCP transport peers permitted to supply one numeric `X-Forwarded-For` address. No DNS names or CIDRs. |
 | `anonymous_station_address` | empty | Explicit numeric address representing **one physical station**. Required for empty/whitespace-only IDs. Also establishes the only supported cross-protocol physical association. Despite the historical setting name, it may associate nonempty protocol IDs from that station too. |
@@ -71,7 +71,7 @@ For an unbound legacy **nonempty** station ID, the old protocol-agnostic identit
 
 ## Loaded-code proof and validation scope
 
-The manifest version is `2026.2.1+sensorsource.3`. Diagnostics retain the HTTP and source implementation markers, selected source, acceptance/rejection counts, timeout and binding/trust indicators. Raw IDs, addresses, keys, measurements and free-text logs are omitted. Counters reset on listener recreation.
+The manifest version is `2026.2.1+sensorsource.4`. Diagnostics retain the HTTP and source implementation markers and add the combined ownership contract, quantity owners and per-protocol accepted-field counts. Raw IDs, addresses, keys, measurements and free-text logs are omitted. Counters reset on listener recreation.
 
 The isolated tests use real HA 2026.10.2 classes, real `SensorEntity` conversion/registry-option handling, real event-loop timers and ephemeral loopback HTTP forwarding. As in the first intervention, the entity-platform orchestration/state-write seam is substituted; this is not a complete Core/Recorder/frontend boot or a live-installation verification. Source preference and device-specific daily-rain/solar semantics require owner/firmware confirmation.
 
