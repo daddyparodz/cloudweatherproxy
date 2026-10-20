@@ -8,8 +8,9 @@ uv pip install --python .venv/bin/python -r requirements-test-ha2026.10.txt
 .venv/bin/python -m pytest -v
 ```
 
-The original `requirements.txt` targets HA 2025.12.5 and pins pycares<5;
-HA 2026.10.2 requires aiodns 4 / pycares>=5. Do not combine those files.
+The upstream `requirements.txt` targets HA 2025.12.5; the separate test
+requirements target HA 2026.10.2. Use separate environments rather than
+combining those dependency sets.
 The initial reload regression also passed against the original HA 2025.12.5
 environment during development; the complete suite is verified against HA 2026.10.2.
 
@@ -77,6 +78,6 @@ Config-entry diagnostics include `receiver_lifecycle` with implementation
 `reloadfix.1`, API version 1, the actual GET route count from aiohttp's public
 router API, active/accepting flags and the number of in-flight leases. The permanent
 registry retains no ConfigEntry object and survives unload/removal, so the route
-count remains two across reloads. Manifest version is `2026.2.1+reloadfix.1`
-(validated with HA's AwesomeVersion). Deploying changed Python modules still needs
+count remains two across reloads. This contribution retains upstream's manifest
+version; release versioning is left to the maintainer. Deploying changed Python modules still needs
 a separately authorized initial Core restart; these tests do not deploy or restart HA.
