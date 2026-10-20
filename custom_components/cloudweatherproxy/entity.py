@@ -32,8 +32,9 @@ def identity_suffix(sensor: Sensor, station: WeatherStation) -> str:
     """Preserve upstream counter IDs without letting IDs select metadata.
 
     A legacy ``rain`` record is not evidence of a single physical quantity:
-    historical versions used it for both depth and intensity. Keep the safe
-    semantic namespace unless independent provenance can establish its type.
+    historical versions used it for both depth and intensity. Keep the semantic
+    namespace unless dimensional metadata and an explicit physical/source binding
+    establish future compatibility (resolved by sensor setup, not the ID alone).
     """
     if sensor.name in ("dailyrain", "weeklyrain", "monthlyrain"):
         # Physical identity is resolved before this point. Shared depth units
@@ -77,9 +78,13 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         sensor: Sensor,
         station: WeatherStation,
         name: str,
+        *,
+        unique_id: str | None = None,
     ) -> None:
         """Initialize the sensor entity."""
         super().__init__(sensor, station)
+        if unique_id is not None:
+            self._attr_unique_id = unique_id
         self._attr_name = name
         self._attr_native_value = sensor.value if sensor else None
         self.entity_description = QUANTITY_DESCRIPTIONS[quantity_key(sensor, station)]

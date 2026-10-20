@@ -20,6 +20,9 @@ from custom_components.cloudweatherproxy.const import DOMAIN
 @pytest.mark.parametrize("legacy_unit,legacy_class,legacy_state_class", [
     ("mm", "precipitation", "total_increasing"),
     ("mm/h", "precipitation_intensity", "measurement"),
+    ("in", "precipitation", "measurement"),
+    ("mm/h", "precipitation", "measurement"),
+    ("mm", "precipitation_intensity", "measurement"),
     (None, None, None),
 ])
 async def test_real_platform_reattaches_upstream_counter_and_preserves_custom_name(
@@ -76,13 +79,46 @@ async def test_real_platform_reattaches_upstream_counter_and_preserves_custom_na
             if suffix == "dailyrain":
                 assert entity.name == "Daily Rain"
         assert len(platform.entities) == len(suffixes) + 1
-        assert registry.async_get(legacy_rain.entity_id) is legacy_rain
-        assert legacy_rain.entity_id not in platform.entities
+        compatible = (
+            source == "wunderground" and legacy_unit in ("mm", "in") and legacy_class == "precipitation"
+            or source == "weathercloud" and legacy_unit == "mm/h" and legacy_class == "precipitation_intensity"
+        )
         quantity = "rain_1h" if source == "wunderground" else "rain_intensity"
-        rain = entry.runtime_data.known_sensors[f"-{quantity}"]
+        suffix = "rain" if compatible else quantity
+        rain = entry.runtime_data.known_sensors[f"-{suffix}"]
+        if compatible:
+            assert rain.entity_id == legacy_rain.entity_id
+            assert rain.registry_entry.name == "My Rain"
+            assert rain.registry_entry.device_id == device.id
+            assert registry.async_get_entity_id("sensor", DOMAIN, f"-{quantity}") is None
+        else:
+            assert registry.async_get(legacy_rain.entity_id) is legacy_rain
+            assert legacy_rain.entity_id not in platform.entities
         assert rain.state_class == "measurement"
         assert rain.native_unit_of_measurement == ("mm" if source == "wunderground" else "mm/h")
         assert rain.device_class == ("precipitation" if source == "wunderground" else "precipitation_intensity")
+        if compatible:
+            # Removing obsolete parallel records must be durable, not disabling them.
+            for obsolete_suffix in (quantity, f"{source}_dailyrain"):
+                obsolete = registry.async_get_or_create(
+                    "sensor", DOMAIN, f"-{obsolete_suffix}", config_entry=entry, device_id=device.id
+                )
+                registry.async_remove(obsolete.entity_id)
+            for _ in range(3):
+                await platform.async_reset()
+                await entry._async_process_on_unload(hass)
+                entry.runtime_data = SimpleNamespace(listener=listener, known_sensors={})
+                pending.clear()
+                await sensor.async_setup_entry(hass, entry, pending.extend)
+                await listener._new_dataset_cb(station)
+                await platform.async_add_entities(pending)
+                pending.clear()
+                await listener._new_dataset_cb(station)
+                assert not pending  # Natural updates never add a parallel entity.
+                assert platform.entities[legacy_rain.entity_id].unique_id == "-rain"
+                assert registry.async_get_entity_id("sensor", DOMAIN, f"-{quantity}") is None
+                assert registry.async_get_entity_id("sensor", DOMAIN, f"-{source}_dailyrain") is None
+                assert len(platform.entities) == len(suffixes) + 1
     finally:
         await platform.async_reset()
         await entry._async_process_on_unload(hass)

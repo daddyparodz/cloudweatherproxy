@@ -64,7 +64,12 @@ async def test_selected_source_is_not_first_packet_wins(receiver, order, source)
 
 async def test_bound_source_change_preserves_only_compatible_quantities(receiver):
     """Verify bound source change preserves only compatible quantities."""
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
     hass, entry, client, writes = receiver
+    dr.async_setup(hass)
+    await dr.async_load(hass, load_empty=True)
+    await er.async_load(hass, load_empty=True)
     await reconfigure(receiver, anonymous_station_address="127.0.0.1", legacy_anonymous_binding=True)
     wu = PATHS[0] + "&rainin=1&dailyrainin=2&solarradiation=1050"
     await client.get(wu)

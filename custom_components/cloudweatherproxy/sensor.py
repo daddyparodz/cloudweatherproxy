@@ -12,10 +12,13 @@ from .aiocloudweather import CloudWeatherListener, Sensor, WeatherStation
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+from homeassistant.const import UnitOfPrecipitationDepth, UnitOfVolumetricFlux
 
 from . import CloudWeatherProxyConfigEntry
 from .entity import CloudWeatherEntity, identity_suffix, quantity_key
-from .const import QUANTITY_DESCRIPTIONS
+from .const import DOMAIN, QUANTITY_DESCRIPTIONS
 from .source import numeric_address, station_identity
 from .aiocloudweather.station import WeatherstationVendor
 
@@ -102,6 +105,24 @@ async def async_setup_entry(
                 continue
             counters["accepted_fields"] += 1
             unique_id = f"{identity}-{identity_suffix(sensor, station)}"
+            if sensor.name == "rain" and binding and legacy and "sensor_source" in entry.data:
+                # The explicit physical binding and source establish future provenance.
+                # Original class (not a user override) and unit must agree in dimension.
+                # This does not certify or repair historical samples or statistics.
+                registry = er.async_get(hass)
+                old_id = registry.async_get_entity_id("sensor", DOMAIN, f"{identity}-rain")
+                old = registry.async_get(old_id) if old_id else None
+                device = dr.async_get(hass).async_get(old.device_id) if old and old.device_id else None
+                units = UnitOfPrecipitationDepth if quantity == "rain_1h" else UnitOfVolumetricFlux
+                if (
+                    old is not None
+                    and old.config_entry_id == entry.entry_id
+                    and device is not None
+                    and (DOMAIN, identity) in device.identifiers
+                    and old.original_device_class == description.device_class
+                    and old.unit_of_measurement in units
+                ):
+                    unique_id = f"{identity}-rain"
 
             if unique_id in known_sensors:
                 known_sensors[unique_id].refresh_expiry(timeout)
@@ -109,7 +130,7 @@ async def async_setup_entry(
                 continue
 
             meta_name = field.metadata.get("name") or sensor.name
-            new_sensor = CloudWeatherEntity(sensor, station, str(meta_name))
+            new_sensor = CloudWeatherEntity(sensor, station, str(meta_name), unique_id=unique_id)
             new_sensor.refresh_expiry(timeout)
             known_sensors[unique_id] = new_sensor
             new_sensors.append(new_sensor)
