@@ -8,22 +8,27 @@ on:
     branches:
       - "main"
 
+permissions:
+  contents: read
+
 jobs:
   ruff:
     name: "Ruff"
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, Linux, X64]
+    container:
+      image: python:3.13-bookworm
     steps:
         - name: "Checkout the repository"
           uses: "actions/checkout@v6"
-
-        - name: "Set up Python"
-          uses: actions/setup-python@v6
           with:
-            python-version: "3.13"
-            cache: "pip"
+            persist-credentials: false
+            ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
         - name: "Install requirements"
-          run: python3 -m pip install -r requirements.txt
+          run: python3 -m pip install -r requirements.txt PyYAML
+
+        - name: "Check workflow contracts"
+          run: python3 -m unittest discover -s tests -p test_workflow_contract.py -v
 
         - name: "Run"
           run: python3 -m ruff check .
