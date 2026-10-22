@@ -28,7 +28,7 @@ jobs:
           run: python3 -m pip install -r requirements.txt PyYAML
 
         - name: "Check workflow contracts"
-          run: python3 -m unittest discover -s tests -p test_workflow_contract.py -v
+          run: python3 -m unittest discover -s tests -p 'test_*_contract.py' -v
 
         - name: "Run"
           run: python3 -m ruff check .
