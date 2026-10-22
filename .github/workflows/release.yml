@@ -2,34 +2,44 @@ name: "Release"
 
 on:
   release:
-    types:
-      - "published"
+    types: [published]
 
 permissions: {}
 
 jobs:
   release:
     name: "Release"
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, Linux, X64]
+    container:
+      image: python:3.13-bookworm
     permissions:
       contents: write
     steps:
       - name: "Checkout the repository"
-        uses: "actions/checkout@v4"
-
-      - name: "Adjust version number"
-        shell: "bash"
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: "Package the integration"
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          yq -i -o json '.version="${{ github.event.release.tag_name }}"' \
-            "${{ github.workspace }}/custom_components/cloudweatherproxy/manifest.json"
-
-      - name: "ZIP the integration directory"
-        shell: "bash"
-        run: |
-          cd "${{ github.workspace }}/custom_components/cloudweatherproxy"
-          zip cloudweatherproxy.zip -r ./
-
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          root = Path('custom_components/cloudweatherproxy')
+          manifest = root / 'manifest.json'
+          data = json.loads(manifest.read_text())
+          data['version'] = os.environ['RELEASE_TAG']
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          with ZipFile('cloudweatherproxy.zip', 'w', ZIP_DEFLATED) as archive:
+              for path in sorted(root.rglob('*')):
+                  if path.is_file():
+                      archive.write(path, path.relative_to(root))
+          PY
       - name: "Upload the ZIP file to the release"
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ github.workspace }}/custom_components/cloudweatherproxy/cloudweatherproxy.zip
+          files: cloudweatherproxy.zip
