@@ -1,10 +1,12 @@
 """Quarantined resources must have a cleanup path without a future setup."""
 # ruff: noqa: F811
 import asyncio
+from contextlib import nullcontext
 from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import __version__ as HA_VERSION
 
 from custom_components import cloudweatherproxy as component
 from custom_components.cloudweatherproxy.aiocloudweather.proxy import DataSink
@@ -294,7 +296,9 @@ async def test_setup_cancellation_before_first_child_turn_releases_resources(
 
     monkeypatch.setattr(component, "CloudWeatherListener", listener_factory)
     try:
-        with pytest.raises(asyncio.CancelledError):
+        # HA 2025.12 consumes setup cancellation; HA 2026.10 re-raises it.
+        cancellation = nullcontext() if HA_VERSION.startswith("2025.12.") else pytest.raises(asyncio.CancelledError)
+        with cancellation:
             async with entry.setup_lock:
                 await entry.async_setup(hass, integration=integration)
         assert entry.state is ConfigEntryState.SETUP_ERROR
@@ -314,3 +318,54 @@ async def test_setup_cancellation_before_first_child_turn_releases_resources(
         if entry.state is ConfigEntryState.LOADED:
             async with entry.setup_lock:
                 await entry.async_unload(hass, integration=integration)
+
+
+@pytest.mark.parametrize("path", PATHS)
+async def test_forward_timeout_releases_shutdown_drain(
+    receiver, monkeypatch, aiohttp_server, path
+):
+    """A real loopback read timeout releases the lease before session closure."""
+    from aiohttp import ClientTimeout, web
+
+    hass, entry, client, writes = receiver
+    listener = entry.runtime_data.listener
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def upstream(_request):
+        entered.set()
+        await release.wait()
+        return web.Response(text="synthetic upstream")
+
+    app = web.Application()
+    app.router.add_get("/synthetic", upstream)
+    server = await aiohttp_server(app)
+    await listener.update_config(proxy_sinks=list(DataSink))
+    proxy = listener.proxy
+    session = proxy.session
+    timed_out = []
+
+    async def local_forward(_sink, _request):
+        try:
+            return await session.get(
+                server.make_url("/synthetic"), timeout=ClientTimeout(sock_read=0.1)
+            )
+        except TimeoutError as err:
+            timed_out.append(err)
+            raise
+
+    monkeypatch.setattr(proxy, "forward", local_forward)
+    request = asyncio.create_task(client.get(path))
+    await asyncio.wait_for(entered.wait(), 5)
+    stopping = asyncio.create_task(hass.async_stop(force=True))
+    try:
+        assert (await asyncio.wait_for(request, 5)).status == 200
+        await asyncio.wait_for(stopping, 5)
+        assert len(timed_out) == 1
+        assert session.closed
+        assert writes
+        assert hass.data[DOMAIN].receiver.in_flight == 0
+        assert hass.data[DOMAIN].receiver.listener is None
+        assert not hass.data[DOMAIN].receiver.accepting
+    finally:
+        release.set()
+        await asyncio.gather(request, stopping, return_exceptions=True)
