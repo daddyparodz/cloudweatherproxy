@@ -126,6 +126,21 @@ The default field-availability timeout is 900 seconds, including Weathercloud's 
 
 See [sensor-source configuration, physical units and history-preserving migration](SENSOR_SOURCE_MIGRATION.md) before upgrading. Rain amounts, rain intensity and irradiance use distinct semantic entities; old incompatible history is never rewritten. WU camel-case `solarRadiation` remains unsupported until its device-specific units are documented.
 
+Unload, reload and shutdown reject new requests immediately and share a 30-second
+deadline for accepted requests. Requests retain their callbacks and proxy session
+while draining. At the deadline, only outstanding accepted requests are cancelled,
+with up to one second for cancellation to settle. Listener cleanup has a five-second
+limit and one further second for cancellation settlement.
+
+If requests or cleanup do not settle, resources remain owned and ingestion stays
+disabled. Unload returns failure; Home Assistant records `FAILED_UNLOAD` and refuses
+normal reload until restart. The domain shutdown handler can retry quarantined
+cleanup, and the setup hook retries cleanup before creating a replacement listener.
+An unfinished cleanup task remains tracked; retries do not restart its deadline or
+cancel it repeatedly. Diagnostics report the loaded policy, shared monotonic drain
+deadline, request count and cleanup ownership. Permanently uncooperative work can
+remain quarantined until process exit.
+
 <!---->
 
 ## Contributions are welcome!

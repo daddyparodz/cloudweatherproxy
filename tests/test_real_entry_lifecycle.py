@@ -24,7 +24,7 @@ async def integration_for(entry):
 
 @pytest.mark.parametrize("failure", ["stop", "cancel", "cancel_stop"])
 async def test_real_unload_recovers_through_setup(receiver, monkeypatch, failure):
-    """HA finishes unloading; setup retries owned cleanup before replacing it."""
+    """HA records failures; the setup hook retries cleanup before replacement."""
     hass, entry, client, writes = receiver
     integration = await integration_for(entry)
     # Initial fixture uses direct setup; obtain LOADED via real setup next.
@@ -61,9 +61,12 @@ async def test_real_unload_recovers_through_setup(receiver, monkeypatch, failure
         task.cancel()
         release.set()
     try:
-        assert await task
-        assert entry.state is ConfigEntryState.NOT_LOADED
-        assert not hasattr(entry, "runtime_data")
+        assert await task is (failure == "cancel")
+        assert entry.state is (
+            ConfigEntryState.NOT_LOADED if failure == "cancel"
+            else ConfigEntryState.FAILED_UNLOAD
+        )
+        assert hasattr(entry, "runtime_data") is (failure != "cancel")
         if failure != "cancel":
             assert not session.closed
             assert hass.data[DOMAIN].cleanup_pending

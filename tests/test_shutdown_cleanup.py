@@ -16,7 +16,7 @@ from test_receiver_lifecycle import PATHS, make_entry, receiver  # noqa: F401
 
 
 async def test_shutdown_retries_failed_unload_without_later_setup(receiver, monkeypatch):
-    """Normal HA shutdown closes the session after HA discarded runtime_data."""
+    """Normal HA shutdown retries resources retained after FAILED_UNLOAD."""
     hass, entry, client, writes = receiver
     integration = await integration_for(entry)
     assert await component.async_unload_entry(hass, entry)
@@ -30,9 +30,9 @@ async def test_shutdown_retries_failed_unload_without_later_setup(receiver, monk
     monkeypatch.setattr(listener, "stop", failing_stop)
     try:
         async with entry.setup_lock:
-            assert await entry.async_unload(hass, integration=integration)
-        assert entry.state is ConfigEntryState.NOT_LOADED
-        assert not hasattr(entry, "runtime_data")
+            assert not await entry.async_unload(hass, integration=integration)
+        assert entry.state is ConfigEntryState.FAILED_UNLOAD
+        assert hasattr(entry, "runtime_data")
         assert not session.closed
         assert hass.data[DOMAIN].pending_listener is listener
         # A still-failing setup must preserve the same quarantined owner.
@@ -99,11 +99,11 @@ async def test_shutdown_serializes_with_in_progress_unload_cleanup(
         await asyncio.sleep(0)
         assert not session.closed
         release.set()
-        assert await asyncio.wait_for(unloading, 5)
+        assert not await asyncio.wait_for(unloading, 5)
         await asyncio.wait_for(stopping, 5)
         assert calls == 2
-        assert entry.state is ConfigEntryState.NOT_LOADED
-        assert not hasattr(entry, "runtime_data")
+        assert entry.state is ConfigEntryState.FAILED_UNLOAD
+        assert hasattr(entry, "runtime_data")
         assert session.closed is not fails_again
         domain_data = hass.data[DOMAIN]
         assert not domain_data.receiver.accepting
@@ -208,9 +208,9 @@ async def test_shutdown_drains_active_or_unloading_listener(
         release.set()
         assert (await asyncio.wait_for(request, 5)).status == 200
         if unloading is not None:
-            assert await asyncio.wait_for(unloading, 5)
-            assert entry.state is ConfigEntryState.NOT_LOADED
-            assert not hasattr(entry, "runtime_data")
+            assert not await asyncio.wait_for(unloading, 5)
+            assert entry.state is ConfigEntryState.FAILED_UNLOAD
+            assert hasattr(entry, "runtime_data")
         await asyncio.wait_for(stopping, 5)
         assert session.closed
         assert calls == (2 if unload_first else 1)

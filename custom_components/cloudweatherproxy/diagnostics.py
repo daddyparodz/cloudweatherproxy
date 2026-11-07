@@ -7,7 +7,7 @@ from . import CloudWeatherProxyConfigEntry
 from .entity import quantity_key
 from .source import COMBINED_OWNERS
 from .const import DOMAIN, CONF_WUNDERGROUND_PROXY, CONF_WEATHERCLOUD_PROXY
-from .web import WeathercloudReceiver, WundergroundReceiver
+from .web import DRAIN_TIMEOUT, WeathercloudReceiver, WundergroundReceiver
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWeatherProxyConfigEntry) -> dict[str, Any]:
@@ -31,8 +31,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWe
 
     return {
         "receiver_lifecycle": {
-            "implementation": "reloadfix.1",
-            "api_version": 1,
+            "implementation": "drain30.1",
+            "api_version": 2,
             "registered_views": sum(
                 route.method == "GET" and route.resource.canonical in (
                     WundergroundReceiver.url, WeathercloudReceiver.url.replace(":.*", "")
@@ -42,6 +42,13 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: CloudWe
             "active": hass.data[DOMAIN].receiver.listener is not None,
             "accepting": hass.data[DOMAIN].receiver.accepting,
             "in_flight": hass.data[DOMAIN].receiver.in_flight,
+            "drain_timeout_seconds": DRAIN_TIMEOUT,
+            "drain_deadline": hass.data[DOMAIN].receiver.drain_deadline,
+            "cancel_deadline": hass.data[DOMAIN].receiver.cancel_deadline,
+            "cleanup_pending": hass.data[DOMAIN].cleanup_pending,
+            "cleanup_running": hass.data[DOMAIN].cleanup_task is not None,
+            "owns_entry": hass.data[DOMAIN].entry_id == entry.entry_id,
+            "stopping": hass.data[DOMAIN].stopping,
         },
         "sensor_source": {
             "implementation": "sensorsource.1",

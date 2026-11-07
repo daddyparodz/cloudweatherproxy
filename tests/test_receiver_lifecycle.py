@@ -226,12 +226,19 @@ async def test_loaded_code_diagnostics_report_stable_receiver_status(receiver):
     data = await async_get_config_entry_diagnostics(hass, entry)
     status = data["receiver_lifecycle"]
     assert status == {
-        "implementation": "reloadfix.1",
-        "api_version": 1,
+        "implementation": "drain30.1",
+        "api_version": 2,
         "registered_views": 2,
         "active": True,
         "accepting": True,
         "in_flight": 0,
+        "drain_timeout_seconds": 30.0,
+        "drain_deadline": None,
+        "cancel_deadline": None,
+        "cleanup_pending": False,
+        "cleanup_running": False,
+        "owns_entry": True,
+        "stopping": False,
     }
     assert await async_unload_entry(hass, entry)
     status = (await async_get_config_entry_diagnostics(hass, entry))[
@@ -448,7 +455,7 @@ async def test_stop_failure_keeps_cleanup_retryable(receiver, monkeypatch):
     monkeypatch.setattr(hass.config_entries, "async_unload_platforms", unload)
     stop = AsyncMock(side_effect=RuntimeError("synthetic stop failure"))
     monkeypatch.setattr(listener, "stop", stop)
-    assert await async_unload_entry(hass, entry)
+    assert not await async_unload_entry(hass, entry)
     assert not listener.new_dataset_cb
     assert (await client.get(PATHS[0])).status == 503
     assert not session.closed
@@ -495,7 +502,7 @@ async def test_cancelled_stop_finishes_cleanup_before_releasing_owner(receiver, 
         assert not listener.new_dataset_cb
     finally:
         release.set()
-        assert await task
+        assert await task is (not stop_error)
     if stop_error:
         assert "cleanup failed while cancelled" in caplog.text
         assert not session.closed

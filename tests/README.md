@@ -55,18 +55,19 @@ exercise the installed HA ConfigEntry setup/unload wrappers and their state
 transitions. Platform orchestration remains substituted at the seam described
 above; these are not full Core boot or live-installation tests.
 
-Unload is an atomic transaction: caller cancellation, including repeated
-cancellation during draining or resource cleanup, is consumed until the transaction
-finishes so HA can complete its own state transition and runtime-data removal.
-Cancellation of an individual HTTP request still releases its listener lease.
-There is no independent unload deadline: a request or cleanup operation that never
-finishes can delay unload/shutdown despite caller cancellation. The tests establish
-completion once blocked work is released, not bounded shutdown latency.
+Caller cancellation is deferred until the owned unload transaction returns its
+result to HA. Accepted requests share a 30-second monotonic deadline beginning at
+the first unload or stop operation. They retain callbacks and sessions during that
+interval. Outstanding request tasks are cancelled once at expiry, with one second
+for settlement. Cleanup has a five-second limit and a one-second cancellation
+settlement limit. Neither wait uses an unbounded cancellation gather.
 
 If stopping a retired listener fails after platform teardown, the receiver remains
 inactive and DomainData explicitly owns the quarantined listener. Errors are logged,
-and a later setup retries its cleanup before creating a replacement. No cleanup is
-left running as an untracked background task. A domain-level HA stop callback joins
+and the unload hook returns false. HA 2026.10.4 retains runtime data and enters
+`FAILED_UNLOAD`, which normal reload cannot recover; restart is required. The setup
+hook can retry cleanup before creating a replacement. Unfinished cleanup remains
+tracked in DomainData, with its original deadlines. A domain-level HA stop callback joins
 any in-progress setup/unload transaction and then drains and closes the active
 listener or retries quarantine, without requiring another setup. Shutdown never
 re-enables ingestion if a pending platform setup completes. A cleanup lock keeps
@@ -77,19 +78,18 @@ failure. If the shutdown cleanup also fails, ownership
 is retained and the failure is logged; closure is not guaranteed for a permanently
 failing stop operation. This is one shutdown retry, not a periodic retry service.
 
-Choosing a bounded drain would change the accepted-request contract. The current
-contract retains callbacks and sessions until every accepted request finishes.
-A timeout would need a specified duration and a decision between cancelling those
-requests or refusing unload (which HA marks FAILED_UNLOAD). Neither consequence is
-silently introduced here. Caller cancellation is not a drain deadline.
+`test_drain_deadline.py` covers both HTTP protocols, forwarding, permanent blocked
+requests, uncooperative cancellation, bounded cleanup, quarantine recovery, real
+ConfigEntry unload and ConfigEntries reload concurrent with real HA stop. One
+isolated synthetic HTTP test uses the production 30-second deadline and real clock.
+Other deadline tests shorten constants to exercise the same code deterministically.
 
 ## Loaded-code identification
 
 Config-entry diagnostics include `receiver_lifecycle` with implementation
-`reloadfix.1`, API version 1, the actual GET route count from aiohttp's public
-router API, active/accepting flags and the number of in-flight leases. The permanent
+`drain30.1`, API version 2, the actual GET route count from aiohttp's public
+router API, active/accepting flags, in-flight leases, the shared deadline and
+cleanup ownership. The permanent
 registry retains no ConfigEntry object and survives unload/removal, so the route
-count remains two across reloads. The manifest retains the current main version;
-loaded-code diagnostics, not a release bump, identify this implementation.
-Deploying changed Python modules still needs
-a separately authorized initial Core restart; these tests do not deploy or restart HA.
+count remains two across reloads. The manifest version is
+`2026.2.3+sensorsource.6`. Changed Python modules require a Core restart to load.
