@@ -16,7 +16,7 @@ class ManifestContract(unittest.TestCase):
         )
         self.assertEqual(manifest.get('requirements', []), [])
         self.assertEqual(manifest['dependencies'], ['http'])
-        self.assertEqual(manifest['version'], '2025.12.0')
+        self.assertEqual(manifest['version'], '2026.2.2+sensorsource.5')
 
 
 if __name__ == '__main__':
