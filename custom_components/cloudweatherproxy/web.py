@@ -15,6 +15,9 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+DRAIN_TIMEOUT = 30.0
+CANCEL_SETTLE_TIMEOUT = 1.0
+
 
 class ReceiverManager:
     """Permanent per-HA dispatch target; never retain a config entry."""
@@ -26,6 +29,20 @@ class ReceiverManager:
         self._requests = 0
         self._drained = asyncio.Event()
         self._drained.set()
+        self._request_tasks: set[asyncio.Task] = set()
+        self.drain_deadline: float | None = None
+        self.cancel_deadline: float | None = None
+
+    def begin_drain(self) -> None:
+        """Close admission and start the shared, monotonic shutdown deadline."""
+        self.accepting = False
+        if self.drain_deadline is None:
+            self.drain_deadline = asyncio.get_running_loop().time() + DRAIN_TIMEOUT
+
+    def reset_drain(self) -> None:
+        """Start a new lifecycle after successful cleanup or refused teardown."""
+        self.drain_deadline = None
+        self.cancel_deadline = None
 
     @property
     def in_flight(self) -> int:
@@ -33,9 +50,25 @@ class ReceiverManager:
         return self._requests
 
     async def drain(self) -> None:
-        """Reject new requests and wait for existing listener users."""
-        self.accepting = False
-        await self._drained.wait()
+        """Drain naturally, then cancel accepted tasks once and bound settlement."""
+        self.begin_drain()
+        loop = asyncio.get_running_loop()
+        assert self.drain_deadline is not None
+        if self._requests and loop.time() < self.drain_deadline:
+            try:
+                async with asyncio.timeout_at(self.drain_deadline):
+                    await self._drained.wait()
+            except TimeoutError:
+                pass
+        if not self._requests:
+            return
+        if self.cancel_deadline is None:
+            self.cancel_deadline = loop.time() + CANCEL_SETTLE_TIMEOUT
+            for task in self._request_tasks:
+                task.cancel()
+        remaining = self.cancel_deadline - loop.time()
+        if remaining > 0:
+            await asyncio.wait(self._request_tasks, timeout=remaining)
 
     async def handler(self, request: web.Request) -> web.Response:
         """Dispatch to the currently loaded listener."""
@@ -44,11 +77,15 @@ class ReceiverManager:
             return web.Response(status=HTTPStatus.SERVICE_UNAVAILABLE)
         # No await between resolving the target and acquiring its lease.
         self._requests += 1
+        task = asyncio.current_task()
+        assert task is not None
+        self._request_tasks.add(task)
         self._drained.clear()
         try:
             return await listener.handler(request)
         finally:
             self._requests -= 1
+            self._request_tasks.discard(task)
             if not self._requests:
                 self._drained.set()
 
