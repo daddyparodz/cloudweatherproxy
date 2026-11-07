@@ -28,14 +28,14 @@ PATHS = [
 ]
 
 
-def make_entry(sensor_source="wunderground"):
+def make_entry(sensor_source="wunderground", *, weathercloud_proxy=False):
     """Create a real config entry containing only synthetic local-test data."""
     return ConfigEntry(
         domain=DOMAIN,
         title="Synthetic",
         data={
             "weatherunderground_proxy": False,
-            "weathercloud_proxy": False,
+            "weathercloud_proxy": weathercloud_proxy,
             "dns_servers": "192.0.2.1",
             "sensor_source": sensor_source,
         },
@@ -89,8 +89,13 @@ async def receiver(tmp_path, monkeypatch, request):
         await client.start_server()
     yield hass, entry, client, writes
     await client.close()
-    listener = entry.runtime_data.listener
-    await listener.stop()
+    runtime = getattr(entry, "runtime_data", None)
+    domain_data = hass.data.get(DOMAIN)
+    listener = runtime.listener if runtime is not None else (
+        domain_data.pending_listener if domain_data is not None else None
+    )
+    if listener is not None:
+        await listener.stop()
     if DOMAIN in hass.data:
         import logging
 

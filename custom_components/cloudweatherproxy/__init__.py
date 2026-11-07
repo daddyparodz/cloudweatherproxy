@@ -11,7 +11,7 @@ from .aiocloudweather.proxy import DataSink
 from .aiocloudweather.utils import LimitedSizeQueue, DiagnosticsLogHandler
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_DNS_SERVERS, CONF_WEATHERCLOUD_PROXY, CONF_WUNDERGROUND_PROXY, DOMAIN
@@ -44,9 +44,29 @@ class DomainData:
     entry_id: str | None = None
     cleanup_pending: bool = False
     pending_listener: CloudWeatherListener | None = None
+    cleanup_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    stopping: bool = False
+    setup_complete: asyncio.Future[None] | None = None
+    unload_task: asyncio.Task[bool] | None = None
 
 
 async def _async_cleanup_listener(
+    domain_data: DomainData,
+    listener: CloudWeatherListener,
+    cancellation: asyncio.CancelledError | None = None,
+    *,
+    quarantine_failure: bool = False,
+) -> None:
+    """Serialize cleanup owners, including shutdown and a concurrent unload."""
+    async with domain_data.cleanup_lock:
+        if domain_data.pending_listener is not listener:
+            return
+        await _async_cleanup_listener_owned(
+            domain_data, listener, cancellation, quarantine_failure=quarantine_failure
+        )
+
+
+async def _async_cleanup_listener_owned(
     domain_data: DomainData,
     listener: CloudWeatherListener,
     cancellation: asyncio.CancelledError | None = None,
@@ -67,7 +87,7 @@ async def _async_cleanup_listener(
         task.result()
     except (Exception, asyncio.CancelledError):
         if quarantine_failure:
-            _LOGGER.exception("Listener cleanup failed; resources quarantined until next setup")
+            _LOGGER.exception("Listener cleanup failed; resources remain quarantined")
             return
         if cancellation is not None:
             _LOGGER.exception("Listener cleanup failed during cancellation; setup can retry")
@@ -87,6 +107,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CloudWeatherProxyConfigE
         _LOGGER.error("Multiple Cloud Weather Proxy entries configured; remove duplicates")
         return False
     domain_data: DomainData | None = hass.data.get(DOMAIN)
+    if domain_data is not None and domain_data.stopping:
+        return False
     if domain_data is not None and domain_data.cleanup_pending:
         if not domain_data.receiver.accepting:
             return False
@@ -95,7 +117,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CloudWeatherProxyConfigE
             assert domain_data.pending_listener is not None
             await _async_cleanup_listener(domain_data, domain_data.pending_listener)
         finally:
-            domain_data.receiver.accepting = True
+            domain_data.receiver.accepting = not domain_data.stopping
+        if domain_data.stopping:
+            return False
     if DOMAIN in hass.data and hass.data[DOMAIN].entry_id is not None:
         _LOGGER.error("Only one Cloud Weather Proxy entry can be loaded")
         return False
@@ -132,7 +156,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: CloudWeatherProxyConfigE
         hass.http.register_view(WundergroundReceiver(hass.data[DOMAIN].receiver))
         hass.http.register_view(WeathercloudReceiver(hass.data[DOMAIN].receiver))
 
-    hass.data[DOMAIN].entry_id = entry.entry_id
+        async def shutdown_cleanup(_event) -> None:
+            """Join transitions before retiring active or quarantined resources."""
+            domain_data = hass.data[DOMAIN]
+            domain_data.stopping = True
+            receiver = domain_data.receiver
+            receiver.accepting = False
+            for task in (domain_data.setup_complete, domain_data.unload_task):
+                if task is not None:
+                    # The integration call still owns this task. Observe its
+                    # completion without cancelling it at HA's stop boundary.
+                    await asyncio.shield(asyncio.gather(task, return_exceptions=True))
+            listener = domain_data.pending_listener
+            if listener is None and receiver.listener is not None:
+                await receiver.drain()
+                listener = receiver.listener
+                receiver.listener = None
+                domain_data.pending_listener = listener
+                domain_data.cleanup_pending = True
+            if listener is not None:
+                await _async_cleanup_listener(
+                    domain_data, listener, quarantine_failure=True
+                )
+
+        # Domain ownership outlives successful entry unload and failed setup.
+        # An entry unload callback would disappear before this retry is needed.
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, shutdown_cleanup)
+
+    domain_data = hass.data[DOMAIN]
+    domain_data.entry_id = entry.entry_id
+    complete = hass.loop.create_future()
+    domain_data.setup_complete = complete
+    try:
+        return await _async_finish_setup(hass, entry, domain_data, cloudweather)
+    finally:
+        complete.set_result(None)
+        domain_data.setup_complete = None
+
+
+async def _async_finish_setup(
+    hass: HomeAssistant, entry: CloudWeatherProxyConfigEntry,
+    domain_data: DomainData, cloudweather: CloudWeatherListener,
+) -> bool:
+    """Keep setup resource ownership joinable until binding or rollback ends."""
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except BaseException as err:
@@ -147,11 +213,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CloudWeatherProxyConfigE
                 err if isinstance(err, asyncio.CancelledError) else None,
             )
         finally:
-            domain_data.receiver.accepting = True
+            domain_data.receiver.accepting = not domain_data.stopping
         raise
 
-    hass.data[DOMAIN].receiver.listener = cloudweather
-    hass.data[DOMAIN].receiver.accepting = True
+    domain_data.receiver.listener = cloudweather
+    domain_data.receiver.accepting = not domain_data.stopping
 
     return True
 
@@ -170,12 +236,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: CloudWeatherProxyConfig
     # complete transaction and return its outcome so HA can finish its state
     # transition. No detached task may outlive this hook.
     task = asyncio.create_task(_async_unload_owned(hass, entry, domain_data))
-    while not task.done():
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError:
-            continue
-    return task.result()
+    domain_data.unload_task = task
+    try:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+        return task.result()
+    finally:
+        domain_data.unload_task = None
 
 
 async def _async_unload_owned(
@@ -201,4 +271,4 @@ async def _async_unload_owned(
         )
         return True
     finally:
-        receiver.accepting = True
+        receiver.accepting = not domain_data.stopping

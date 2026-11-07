@@ -66,10 +66,22 @@ completion once blocked work is released, not bounded shutdown latency.
 If stopping a retired listener fails after platform teardown, the receiver remains
 inactive and DomainData explicitly owns the quarantined listener. Errors are logged,
 and a later setup retries its cleanup before creating a replacement. No cleanup is
-left running as an untracked background task. A domain-level shutdown retry is not
-implemented: if there is no subsequent setup, a quarantined session may remain open
-until process termination. This is a known failure-path limitation, not proof that
-all resources have closed.
+left running as an untracked background task. A domain-level HA stop callback joins
+any in-progress setup/unload transaction and then drains and closes the active
+listener or retries quarantine, without requiring another setup. Shutdown never
+re-enables ingestion if a pending platform setup completes. A cleanup lock keeps
+shutdown and an in-progress cleanup from stopping the same listener concurrently.
+`test_shutdown_cleanup.py` exercises real `HomeAssistant.async_stop`, failed unload
+and setup, accepted HTTP requests, shutdown during drain/setup, and repeated stop
+failure. If the shutdown cleanup also fails, ownership
+is retained and the failure is logged; closure is not guaranteed for a permanently
+failing stop operation. This is one shutdown retry, not a periodic retry service.
+
+Choosing a bounded drain would change the accepted-request contract. The current
+contract retains callbacks and sessions until every accepted request finishes.
+A timeout would need a specified duration and a decision between cancelling those
+requests or refusing unload (which HA marks FAILED_UNLOAD). Neither consequence is
+silently introduced here. Caller cancellation is not a drain deadline.
 
 ## Loaded-code identification
 
@@ -77,6 +89,7 @@ Config-entry diagnostics include `receiver_lifecycle` with implementation
 `reloadfix.1`, API version 1, the actual GET route count from aiohttp's public
 router API, active/accepting flags and the number of in-flight leases. The permanent
 registry retains no ConfigEntry object and survives unload/removal, so the route
-count remains two across reloads. Manifest version is `2026.2.1+reloadfix.1`
-(validated with HA's AwesomeVersion). Deploying changed Python modules still needs
+count remains two across reloads. The manifest retains the current main version;
+loaded-code diagnostics, not a release bump, identify this implementation.
+Deploying changed Python modules still needs
 a separately authorized initial Core restart; these tests do not deploy or restart HA.

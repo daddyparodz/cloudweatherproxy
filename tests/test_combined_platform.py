@@ -16,6 +16,7 @@ from custom_components.cloudweatherproxy.const import DOMAIN
 
 @pytest.mark.parametrize("imperial", [False, True])
 async def test_combined_real_platform_renamed_ids_conversions_and_reload(tmp_path, imperial):
+    """Preserve entity identities and display conversions across source changes."""
     hass = HomeAssistant(str(tmp_path))
     hass.config.units = US_CUSTOMARY_SYSTEM if imperial else METRIC_SYSTEM
     hass.config_entries = ConfigEntries(hass, {})

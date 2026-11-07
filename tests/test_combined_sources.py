@@ -1,4 +1,5 @@
 """Explicit combined profile; synthetic loopback observations only."""
+# ruff: noqa: F811  # Imported pytest fixture names are intentionally injected.
 import pytest
 from test_receiver_lifecycle import receiver, PATHS  # noqa: F401
 from test_sensor_sources import reconfigure
@@ -6,6 +7,7 @@ from test_sensor_sources import reconfigure
 
 @pytest.mark.parametrize("order", [(0, 1), (1, 0)])
 async def test_combined_fixed_owners(receiver, order):
+    """Use fixed quantity owners regardless of packet arrival order."""
     hass, entry, client, writes = receiver
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     dr.async_setup(hass)
@@ -28,6 +30,7 @@ async def test_combined_fixed_owners(receiver, order):
 
 
 async def test_combined_loaded_proof_and_names(receiver):
+    """Expose quantity ownership without disclosing the station address."""
     import json
     from custom_components.cloudweatherproxy.diagnostics import async_get_config_entry_diagnostics
     hass, entry, client, writes = receiver
@@ -44,6 +47,7 @@ async def test_combined_loaded_proof_and_names(receiver):
 
 
 async def test_combined_no_fallback_expiry_invalid_and_wrong_origin(receiver):
+    """Reject non-owner data without renewing availability timers."""
     import asyncio
     hass, entry, client, writes = receiver
     await reconfigure(receiver, sensor_source="combined", anonymous_station_address="192.0.2.20", trusted_sensor_proxies="127.0.0.1", sensor_timeout=1)
@@ -64,6 +68,7 @@ async def test_combined_no_fallback_expiry_invalid_and_wrong_origin(receiver):
 
 
 async def test_combined_rate_never_reuses_legacy_rain(receiver):
+    """Keep rainfall intensity separate from ambiguous legacy rain identities."""
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     from custom_components.cloudweatherproxy.const import DOMAIN
     hass, entry, client, writes = receiver
@@ -79,6 +84,7 @@ async def test_combined_rate_never_reuses_legacy_rain(receiver):
 
 
 def test_combined_configuration_requires_binding():
+    """Require explicit physical association before enabling combined sources."""
     import voluptuous as vol
     from custom_components.cloudweatherproxy.config_flow import validate_configuration
     with pytest.raises(vol.Invalid):

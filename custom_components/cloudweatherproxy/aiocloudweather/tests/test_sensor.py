@@ -1,3 +1,5 @@
+"""Verify protocol parsing produces canonical sensor quantities."""
+
 from cloudweatherproxy.aiocloudweather.station import (
     WeatherStation,
     WundergroundRawSensor,
@@ -6,6 +8,7 @@ from cloudweatherproxy.aiocloudweather.station import (
 
 
 def test_weather_station_from_wunderground():
+    """Parse the first Wunderground reference payload."""
     raw_sensor_data = WundergroundRawSensor(
         station_id="12345",
         station_key="12345",
@@ -36,6 +39,7 @@ def test_weather_station_from_wunderground():
 
 
 def test_weather_station_from_wunderground_2():
+    """Parse the second Wunderground reference payload."""
     raw_sensor_data = WundergroundRawSensor(
         station_id="12345",
         station_key="12345",
@@ -60,6 +64,7 @@ def test_weather_station_from_wunderground_2():
 
 
 def test_weather_station_from_weathercloud():
+    """Parse Weathercloud scaled values into canonical units."""
     raw_sensor_data = WeathercloudRawSensor(
         station_id="12345",
         station_key="12345",
