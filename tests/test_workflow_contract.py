@@ -25,6 +25,16 @@ class WorkflowContract(unittest.TestCase):
                 self.assertIn('pull_request', events)
                 self.assertIn('push', events)
 
+    def test_current_ha_regressions_are_executed(self):
+        """Run complete regression discovery in the isolated current-HA target."""
+        data = yaml.safe_load((ROOT / '.github/workflows/lint.yml').read_text())
+        job = data['jobs'].get('integration-tests', {})
+        self.assertEqual(job.get('container', {}).get('image'), 'python:3.14-bookworm')
+        commands = [step.get('run', '') for step in job.get('steps', [])]
+        self.assertIn('python3 -m pip install -r requirements-test-ha2026.10.txt', commands)
+        self.assertIn('python3 -m pytest -o addopts= -q --tb=short', commands)
+        self.assertNotIn('continue-on-error', job)
+
     def test_validators_remain_mandatory(self):
         """Keep both official validators enabled without write permissions."""
         data = yaml.safe_load((ROOT / '.github/workflows/validate.yml').read_text())

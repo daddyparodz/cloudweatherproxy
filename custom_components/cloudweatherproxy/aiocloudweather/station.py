@@ -13,7 +13,6 @@ from .conversion import (
 )
 from .const import (
     DEGREE,
-    LIGHT_LUX,
     PERCENTAGE,
     UV_INDEX,
     UnitOfIrradiance,
@@ -116,14 +115,13 @@ class WundergroundRawSensor:
     monthlyrain: float | None = field(
         default=None, metadata={"unit": UnitOfPrecipitationDepth.INCHES, "arg": "monthlyrainin"}
     )
-    uv: int | None = field(default=None, metadata={
+    uv: float | None = field(default=None, metadata={
                            "unit": UV_INDEX, "arg": "UV"})
     solarradiation: float | None = field(
         default=None,
         metadata={
-            "unit": LIGHT_LUX,
-            "factor": 1000,
-            "arg": "solarRadiation",
+            # Undocumented vendor field: deliberately never parsed or converted.
+            "unsupported": True,
         },
     )
     solarradiation_new: float | None = field(
@@ -243,6 +241,7 @@ class WeatherStation:
     station_key: str
     vendor: WeatherstationVendor
 
+    entity_station_id: str | None = field(default=None)
     station_sw_version: str | None = field(default=None)
     station_client_ip: str | None = field(default=None)
     update_time: float | None = field(default=None)
@@ -328,7 +327,7 @@ class WeatherStation:
         """
         sensor_data = {}
         for sensor_field in fields(data):
-            if sensor_field.name in ("station_id", "station_key"):
+            if sensor_field.name in ("station_id", "station_key") or sensor_field.metadata.get("unsupported"):
                 continue
             value = getattr(data, sensor_field.name)
             if value is None:
@@ -392,7 +391,7 @@ class WeatherStation:
         """
         sensor_data = {}
         for sensor_field in fields(data):
-            if sensor_field.name in ("station_id", "station_key"):
+            if sensor_field.name in ("station_id", "station_key") or sensor_field.metadata.get("unsupported"):
                 continue
             value = getattr(data, sensor_field.name)
             if value is None:

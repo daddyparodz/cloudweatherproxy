@@ -32,3 +32,19 @@ jobs:
 
         - name: "Run"
           run: python3 -m ruff check .
+
+  integration-tests:
+    name: "Home Assistant integration tests"
+    runs-on: [self-hosted, Linux, X64]
+    container:
+      image: python:3.14-bookworm
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: "Install regression requirements"
+        run: python3 -m pip install -r requirements-test-ha2026.10.txt
+      - name: "Run all regression tests"
+        run: python3 -m pytest -o addopts= -q --tb=short
