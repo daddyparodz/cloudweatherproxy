@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from datetime import datetime
 import logging
 from math import isfinite
 
@@ -17,7 +18,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.const import UnitOfPrecipitationDepth, UnitOfVolumetricFlux
 
 from . import CloudWeatherProxyConfigEntry
-from .entity import CloudWeatherEntity, identity_suffix, quantity_key
+from .entity import CloudWeatherEntity, CloudWeatherTimestampEntity, identity_suffix, quantity_key
 from .const import DOMAIN, QUANTITY_DESCRIPTIONS
 from .source import COMBINED_OWNERS, numeric_address, station_identity
 from .aiocloudweather.station import WeatherstationVendor
@@ -36,6 +37,9 @@ async def async_setup_entry(
     cloudweather.sensor_source = selected_source
     counters = cloudweather.source_counters
     cloudweather.protocol_accepted_fields = {"wunderground": 0, "weathercloud": 0}
+    external_data_timestamp = CloudWeatherTimestampEntity(entry.entry_id)
+    runtime_data.external_data_timestamp = external_data_timestamp
+    async_add_entities([external_data_timestamp])
 
     binding = entry.data.get("anonymous_station_address") or None
     if binding:
@@ -90,6 +94,7 @@ async def async_setup_entry(
         known_sensors: dict[str,
                             CloudWeatherEntity] = runtime_data.known_sensors
         new_sensors: list[CloudWeatherEntity] = []
+        external_received_at: datetime | None = None
 
         for field in fields(station):
             field_type = field.type
@@ -137,6 +142,8 @@ async def async_setup_entry(
             if unique_id in known_sensors:
                 known_sensors[unique_id].refresh_expiry(timeout)
                 await known_sensors[unique_id].update_sensor(station)
+                if quantity not in {"indoortemperature", "indoorhumidity", "heatindexindoor"}:
+                    external_received_at = known_sensors[unique_id].last_valid_received_at
                 continue
 
             meta_name = field.metadata.get("name") or sensor.name
@@ -144,6 +151,11 @@ async def async_setup_entry(
             new_sensor.refresh_expiry(timeout)
             known_sensors[unique_id] = new_sensor
             new_sensors.append(new_sensor)
+            if quantity not in {"indoortemperature", "indoorhumidity", "heatindexindoor"}:
+                external_received_at = new_sensor.last_valid_received_at
+
+        if external_received_at is not None:
+            external_data_timestamp.record_receipt(external_received_at)
 
         if len(new_sensors) > 0:
             _LOGGER.debug("Adding %d sensors", len(new_sensors))

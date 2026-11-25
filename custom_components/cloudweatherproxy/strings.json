@@ -1,4 +1,11 @@
 {
+  "entity": {
+    "sensor": {
+      "last_external_data_update": {
+        "name": "Last external data update"
+      }
+    }
+  },
   "config": {
     "step": {
       "user": {

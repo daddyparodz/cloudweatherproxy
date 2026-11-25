@@ -54,6 +54,7 @@ async def receiver(tmp_path, monkeypatch, request):
     """Run real HA views and sensor callbacks on an actual aiohttp server."""
     hass = HomeAssistant(str(tmp_path))
     hass.config_entries = ConfigEntries(hass, {})
+    await hass.config_entries.async_initialize()
     hass.http = HomeAssistantHTTP(
         hass, None, None, None, ["127.0.0.1"], 0, [], "modern"
     )
@@ -63,9 +64,17 @@ async def receiver(tmp_path, monkeypatch, request):
         "async_write_ha_state",
         lambda self: writes.append(self),
     )
+    monkeypatch.setattr(sensor.CloudWeatherTimestampEntity, "async_write_ha_state", lambda self: None)
 
     async def forward(entry, platforms):
-        await sensor.async_setup_entry(hass, entry, writes.extend)
+        # This seam records measurement writes; the summary is independently
+        # asserted by receipt tests and by the real EntityPlatform test.
+        await sensor.async_setup_entry(
+            hass, entry,
+            lambda entities: writes.extend(
+                entity for entity in entities if isinstance(entity, sensor.CloudWeatherEntity)
+            ),
+        )
 
     async def unload(entry, platforms):
         await entry._async_process_on_unload(hass)

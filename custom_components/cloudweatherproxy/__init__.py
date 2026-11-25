@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import CONF_DNS_SERVERS, CONF_WEATHERCLOUD_PROXY, CONF_WUNDERGROUND_PROXY, DOMAIN
 from .web import CANCEL_SETTLE_TIMEOUT, ReceiverManager, WeathercloudReceiver, WundergroundReceiver
-from .entity import CloudWeatherEntity
+from .entity import CloudWeatherEntity, CloudWeatherTimestampEntity
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -31,6 +31,7 @@ class RuntimeData:
 
     listener: CloudWeatherListener
     known_sensors: dict[str, CloudWeatherEntity] = field(default_factory=dict)
+    external_data_timestamp: CloudWeatherTimestampEntity | None = None
 
 
 CloudWeatherProxyConfigEntry = ConfigEntry[RuntimeData]

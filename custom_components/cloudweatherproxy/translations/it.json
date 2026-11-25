@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "sensor": {
+      "last_external_data_update": {
+        "name": "Ultimo aggiornamento dati esterni"
+      }
+    }
+  }
+}

@@ -70,6 +70,53 @@ reference remains unconfirmed; existing pressure metadata is unchanged. No lux
 conversion is inferred from the console's selectable light display units, and the
 undocumented camel-case Wunderground solar field remains ignored.
 
+## Accepted external data timestamps
+
+**Last external data update** is a timestamp sensor for this integration entry
+(Italian: **Ultimo aggiornamento dati esterni**). It records the UTC acceptance
+time of the latest valid external field, after station identity, selected-source,
+fixed ownership, finite-value and unit validation. An identical valid value,
+including zero, renews it. Indoor-only packets and rejected fields do not.
+
+Each measurement internally retains an aware UTC `last_valid_received_at` for
+that individual field. Field expiry retains that receipt and the summary
+timestamp; expiry itself never advances either. The summary stays readable when
+measurements become unavailable. This is receipt/acceptance time on the Home
+Assistant clock, not the station's observation time or a guarantee that every
+external field was present in the latest packet.
+
+Receipt timestamps are runtime-only: after integration reload or Core restart,
+the summary is **unknown** until the first valid external field is accepted.
+No time is reconstructed from old states, expiry deadlines or startup time. This
+avoids presenting historical guesses as accepted receipts; it does not promise
+restart or crash persistence. Existing measurement IDs, histories, source
+selection and timeouts are unchanged. Changed Python modules require a Core
+restart after updating the integration.
+
+The summary is a diagnostic entity, but that category alone does **not** exclude
+it from Recorder. To avoid storing a timestamp row for every accepted packet,
+add its actual entity ID to the existing `recorder.exclude.entities` list (the
+ID can be localized when the entity is first created). For an English-created
+entity, the entry normally looks like:
+
+```yaml
+recorder:
+  exclude:
+    entities:
+      - sensor.last_external_data_update
+```
+
+Merge this into existing Recorder settings rather than replacing them; leave
+measurement entities included so their history is preserved. Per-field receipts
+are intentionally **not** published as changing HA state attributes: excluding
+an attribute from stored JSON alone still creates state rows for attribute-only
+changes. Unchanged numeric reports therefore update the internal receipt and
+summary, without creating measurement history rows. Numeric changes and genuine
+availability changes continue to be recorded normally. The receipt key is also
+marked unrecorded using Home Assistant's supported `_unrecorded_attributes`
+mechanism as a defensive exclusion. None of these changes delete existing
+history or change retention.
+
 ## Installation
 
 

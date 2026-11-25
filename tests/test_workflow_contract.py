@@ -34,6 +34,7 @@ class WorkflowContract(unittest.TestCase):
         self.assertIn('python3 -m pip install -r requirements-test-ha2026.10.txt', commands)
         self.assertIn('python3 -m pytest -o addopts= -q --tb=short', commands)
         self.assertNotIn('continue-on-error', job)
+        self.assertIn('homeassistant==2026.11.3', (ROOT / 'requirements-test-ha2026.10.txt').read_text().splitlines())
 
     def test_validators_remain_mandatory(self):
         """Keep both official validators enabled without write permissions."""

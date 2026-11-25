@@ -31,6 +31,7 @@ async def test_real_platform_reattaches_upstream_counter_and_preserves_custom_na
     """Real HA registration must reuse the legacy record, not just write states."""
     hass = HomeAssistant(str(tmp_path))
     hass.config_entries = ConfigEntries(hass, {})
+    await hass.config_entries.async_initialize()
     dr.async_setup(hass)
     await dr.async_load(hass, load_empty=True)
     await er.async_load(hass, load_empty=True)
@@ -78,7 +79,9 @@ async def test_real_platform_reattaches_upstream_counter_and_preserves_custom_na
             assert entity.native_unit_of_measurement == "mm"
             if suffix == "dailyrain":
                 assert entity.name == "Daily Rain"
-        assert len(platform.entities) == len(suffixes) + 1
+        assert len(platform.entities) == len(suffixes) + 2
+        timestamp_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}-last_external_data_update")
+        assert platform.entities[timestamp_id].device_class == "timestamp"
         compatible = (
             source == "wunderground" and legacy_unit in ("mm", "in") and legacy_class == "precipitation"
             or source == "weathercloud" and legacy_unit == "mm/h" and legacy_class == "precipitation_intensity"
@@ -118,7 +121,7 @@ async def test_real_platform_reattaches_upstream_counter_and_preserves_custom_na
                 assert platform.entities[legacy_rain.entity_id].unique_id == "-rain"
                 assert registry.async_get_entity_id("sensor", DOMAIN, f"-{quantity}") is None
                 assert registry.async_get_entity_id("sensor", DOMAIN, f"-{source}_dailyrain") is None
-                assert len(platform.entities) == len(suffixes) + 1
+                assert len(platform.entities) == len(suffixes) + 2
     finally:
         await platform.async_reset()
         await entry._async_process_on_unload(hass)
