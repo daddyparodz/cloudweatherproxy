@@ -78,8 +78,8 @@ time of the latest valid external field, after station identity, selected-source
 fixed ownership, finite-value and unit validation. An identical valid value,
 including zero, renews it. Indoor-only packets and rejected fields do not.
 
-Each measurement also exposes `last_valid_received_at`, an ISO 8601 UTC attribute
-for that individual field. Field expiry retains that attribute and the summary
+Each measurement internally retains an aware UTC `last_valid_received_at` for
+that individual field. Field expiry retains that receipt and the summary
 timestamp; expiry itself never advances either. The summary stays readable when
 measurements become unavailable. This is receipt/acceptance time on the Home
 Assistant clock, not the station's observation time or a guarantee that every
@@ -107,13 +107,15 @@ recorder:
 ```
 
 Merge this into existing Recorder settings rather than replacing them; leave
-measurement entities included so their history is preserved. The per-field
-`last_valid_received_at` attribute is marked unrecorded using Home Assistant's
-supported `_unrecorded_attributes` mechanism. It remains available to live
-consumers but is omitted from stored attribute payloads. This avoids a unique
-stored attribute payload for every receipt; it does **not** suppress measurement
-state rows caused by an attribute-only state change. Recorder exclusion and
-attribute filtering do not delete existing history or change retention.
+measurement entities included so their history is preserved. Per-field receipts
+are intentionally **not** published as changing HA state attributes: excluding
+an attribute from stored JSON alone still creates state rows for attribute-only
+changes. Unchanged numeric reports therefore update the internal receipt and
+summary, without creating measurement history rows. Numeric changes and genuine
+availability changes continue to be recorded normally. The receipt key is also
+marked unrecorded using Home Assistant's supported `_unrecorded_attributes`
+mechanism as a defensive exclusion. None of these changes delete existing
+history or change retention.
 
 ## Installation
 

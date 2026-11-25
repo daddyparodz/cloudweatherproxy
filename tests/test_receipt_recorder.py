@@ -22,12 +22,8 @@ from custom_components.cloudweatherproxy.const import DOMAIN
 from test_receiver_lifecycle import make_entry
 
 
-async def test_receipt_attributes_stay_live_but_are_not_stored(tmp_path):
-    """Real Recorder serialization reuses attributes; state events remain distinct.
-
-    Attribute exclusion does not suppress state_changed events or state rows.
-    Keep that limitation explicit rather than claiming zero recording overhead.
-    """
+async def test_identical_receipts_do_not_record_rows_but_numeric_changes_do(tmp_path):
+    """Keep per-field receipts in memory, not in changing HA state attributes."""
     hass = HomeAssistant(str(tmp_path))
     hass.config_entries = ConfigEntries(hass, {})
     await hass.config_entries.async_initialize()
@@ -44,6 +40,12 @@ async def test_receipt_attributes_stay_live_but_are_not_stored(tmp_path):
     await sensor.async_setup_entry(hass, entry, pending.extend)
     await platform.async_add_entities(pending)
     pending.clear()
+    timestamp_id = entry.runtime_data.external_data_timestamp.entity_id
+    entity_filter = generate_filter([], [], [], [timestamp_id])
+    hass.data[DATA_RECORDER] = SimpleNamespace(db_connected=hass.loop.create_future())
+    recorder = Recorder(hass, False, False, 10, 5, "sqlite://", 1, 1, entity_filter, set())
+    recorder._dialect_name = "sqlite"
+    recorder.async_initialize()
     station = await listener.process_wunderground({"ID": "synthetic", "rainin": "0"})
     station.station_client_ip = "127.0.0.1"
     events = []
@@ -54,30 +56,47 @@ async def test_receipt_attributes_stay_live_but_are_not_stored(tmp_path):
         await hass.async_block_till_done()
         measurement = next(iter(entry.runtime_data.known_sensors.values()))
         first = hass.states.get(measurement.entity_id)
+        first_receipt = getattr(measurement, "last_valid_received_at", None)
         await asyncio.sleep(0)
         await listener._new_dataset_cb(station)
         await hass.async_block_till_done()
         second = hass.states.get(measurement.entity_id)
         assert first.state == second.state == "0.0"
-        assert first.attributes["last_valid_received_at"] != second.attributes["last_valid_received_at"]
+        relevant = [event for event in events if event.data["entity_id"] == measurement.entity_id]
+        assert len(relevant) == 1
+        assert first_receipt is not None
+        assert measurement.last_valid_received_at > first_receipt
+        assert "last_valid_received_at" not in second.attributes
+        assert first.last_changed == second.last_changed
+        assert first.last_updated == second.last_updated
+        assert second.last_reported > first.last_updated
+        changed = await listener.process_wunderground({"ID": "synthetic", "rainin": "1"})
+        changed.station_client_ip = "127.0.0.1"
+        await listener._new_dataset_cb(changed)
+        await hass.async_block_till_done()
         relevant = [event for event in events if event.data["entity_id"] == measurement.entity_id]
         assert len(relevant) == 2
+        assert hass.states.get(measurement.entity_id).state == "25.4"
         attributes = [StateAttributes.shared_attrs_bytes_from_event(event, "sqlite") for event in relevant]
         assert attributes[0] == attributes[1]
         assert b"last_valid_received_at" not in attributes[0]
 
         # Exercise Recorder's real session-ingestion path with an isolated DB,
         # not a replacement serializer or production Home Assistant database.
-        hass.data[DATA_RECORDER] = SimpleNamespace(db_connected=hass.loop.create_future())
-        recorder = Recorder(hass, False, False, 10, 5, "sqlite://", 1, 1, None, set())
-        recorder._dialect_name = "sqlite"
+        queued_states = []
+        while not recorder._queue.empty():
+            event = recorder._queue.get_nowait()
+            if event.event_type == EVENT_STATE_CHANGED:
+                queued_states.append(event)
+        assert len(queued_states) == 2
+        assert all(event.data["entity_id"] == measurement.entity_id for event in queued_states)
         engine = create_engine("sqlite://")
         Base.metadata.create_all(engine)
         try:
             with Session(engine) as session:
                 recorder.event_session = session
-                for event in relevant:
-                    recorder._process_state_changed_event_into_session(event)
+                for event in queued_states:
+                    recorder._process_one_event(event)
                 session.flush()
                 assert len(session.scalars(select(States)).all()) == 2
                 stored = session.scalars(select(StateAttributes)).all()
@@ -86,13 +105,12 @@ async def test_receipt_attributes_stay_live_but_are_not_stored(tmp_path):
         finally:
             engine.dispose()
 
-        timestamp_id = entry.runtime_data.external_data_timestamp.entity_id
-        entity_filter = generate_filter([], [], [], [timestamp_id])
         assert not entity_filter(timestamp_id)
         assert entity_filter(measurement.entity_id)
         assert hass.states.get(timestamp_id).state not in ("unknown", "unavailable")
     finally:
         unsubscribe()
+        recorder._async_stop_listeners()
         await platform.async_reset()
         await entry._async_process_on_unload(hass)
         await listener.stop()

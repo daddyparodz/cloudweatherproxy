@@ -4,7 +4,7 @@ import logging
 from types import SimpleNamespace
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.core import Event
+from homeassistant.core import Event, State
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.components.recorder.db_schema import StateAttributes
 from homeassistant.config_entries import ConfigEntries
@@ -64,12 +64,24 @@ async def test_combined_real_platform_renamed_ids_conversions_and_reload(tmp_pat
             assert stamp.state == timestamp.native_value.replace(microsecond=0).isoformat()
             for measurement in entry.runtime_data.known_sensors.values():
                 live_state = hass.states.get(measurement.entity_id)
-                assert "last_valid_received_at" in live_state.attributes
+                assert measurement.last_valid_received_at.tzinfo is not None
+                assert "last_valid_received_at" not in live_state.attributes
                 recorded_attributes = StateAttributes.shared_attrs_bytes_from_event(
                     Event(EVENT_STATE_CHANGED, {"new_state": live_state}), None
                 )
                 assert b"last_valid_received_at" not in recorded_attributes
                 assert "last_valid_received_at" in live_state.state_info["unrecorded_attributes"]
+                # The supported exclusion also strips an explicitly supplied
+                # legacy receipt attribute, not merely an already-absent key.
+                legacy_attributes = dict(live_state.attributes)
+                legacy_attributes["last_valid_received_at"] = measurement.last_valid_received_at.isoformat()
+                legacy_state = State(
+                    live_state.entity_id, live_state.state, legacy_attributes,
+                    state_info=live_state.state_info,
+                )
+                assert StateAttributes.shared_attrs_bytes_from_event(
+                    Event(EVENT_STATE_CHANGED, {"new_state": legacy_state}), None
+                ) == recorded_attributes
             assert platform.entities[old.entity_id].unique_id == "-rain"
             assert platform.entities[daily.entity_id].native_value == pytest.approx(50.8)
             assert registry.async_get_entity_id("sensor", DOMAIN, "-rain_1h") is None

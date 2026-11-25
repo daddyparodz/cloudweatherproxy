@@ -16,7 +16,13 @@ class ManifestContract(unittest.TestCase):
         )
         self.assertEqual(manifest.get('requirements', []), [])
         self.assertEqual(manifest['dependencies'], ['http'])
-        self.assertEqual(manifest['version'], '2026.2.3+receipt.1')
+        self.assertEqual(manifest['version'], '2026.2.4+receipt.1')
+        from awesomeversion import AwesomeVersion
+
+        self.assertGreater(
+            AwesomeVersion(manifest['version']),
+            AwesomeVersion('2026.2.3+sensorsource.6'),
+        )
 
 
 if __name__ == '__main__':

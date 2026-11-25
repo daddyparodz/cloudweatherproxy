@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from datetime import datetime
 import logging
 from math import isfinite
 
@@ -93,7 +94,7 @@ async def async_setup_entry(
         known_sensors: dict[str,
                             CloudWeatherEntity] = runtime_data.known_sensors
         new_sensors: list[CloudWeatherEntity] = []
-        external_received_at: str | None = None
+        external_received_at: datetime | None = None
 
         for field in fields(station):
             field_type = field.type
@@ -142,7 +143,7 @@ async def async_setup_entry(
                 known_sensors[unique_id].refresh_expiry(timeout)
                 await known_sensors[unique_id].update_sensor(station)
                 if quantity not in {"indoortemperature", "indoorhumidity", "heatindexindoor"}:
-                    external_received_at = known_sensors[unique_id].extra_state_attributes["last_valid_received_at"]
+                    external_received_at = known_sensors[unique_id].last_valid_received_at
                 continue
 
             meta_name = field.metadata.get("name") or sensor.name
@@ -151,7 +152,7 @@ async def async_setup_entry(
             known_sensors[unique_id] = new_sensor
             new_sensors.append(new_sensor)
             if quantity not in {"indoortemperature", "indoorhumidity", "heatindexindoor"}:
-                external_received_at = new_sensor.extra_state_attributes["last_valid_received_at"]
+                external_received_at = new_sensor.last_valid_received_at
 
         if external_received_at is not None:
             external_data_timestamp.record_receipt(external_received_at)

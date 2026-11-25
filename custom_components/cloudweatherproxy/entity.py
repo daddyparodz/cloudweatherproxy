@@ -40,9 +40,9 @@ class CloudWeatherTimestampEntity(SensorEntity):
         self._attr_unique_id = f"{entry_id}-last_external_data_update"
         self._attr_native_value = None
 
-    def record_receipt(self, received_at: str) -> None:
+    def record_receipt(self, received_at: datetime) -> None:
         """Publish only a receipt supplied by validated external ingestion."""
-        self._attr_native_value = datetime.fromisoformat(received_at)
+        self._attr_native_value = received_at
         if self.hass is not None:
             self.async_write_ha_state()
 
@@ -121,9 +121,7 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         self._attr_name = name
         self._attr_native_value = sensor.value if sensor else None
         # Creation follows selected-owner/identity/finite-value/unit validation.
-        self._attr_extra_state_attributes = {
-            "last_valid_received_at": dt_util.utcnow().isoformat(),
-        }
+        self.last_valid_received_at = dt_util.utcnow()
         self.entity_description = QUANTITY_DESCRIPTIONS[quantity_key(sensor, station)]
         semantic_names = {
             "rain_1h": "Rain past 60 minutes",
@@ -169,9 +167,9 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         self._attr_native_value = self.sensor.value if self.sensor else None
         # The accepted-field callback runs even for identical valid values.
         # Expiry only changes availability and deliberately retains this receipt.
-        self._attr_extra_state_attributes = {
-            "last_valid_received_at": dt_util.utcnow().isoformat(),
-        }
+        # Keep this in memory: a changing HA attribute would create Recorder
+        # state rows even when excluded from recorded attribute payloads.
+        self.last_valid_received_at = dt_util.utcnow()
 
         _LOGGER.debug("Updating %s [%s] with update time %s",
                       self.unique_id, self.sensor, self.station.update_time)
