@@ -10,7 +10,7 @@ from .aiocloudweather import Sensor, WeatherStation
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import Entity, EntityCategory
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUANTITY_DESCRIPTIONS
@@ -32,6 +32,7 @@ class CloudWeatherTimestampEntity(SensorEntity):
         name="Last external data update",
         translation_key="last_external_data_update",
         device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
     )
 
     def __init__(self, entry_id: str) -> None:
@@ -102,6 +103,8 @@ class CloudWeatherBaseEntity(Entity):
 
 class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
     """The Cloud Weather Proxy Sensor Entity."""
+
+    _unrecorded_attributes = frozenset({"last_valid_received_at"})
 
     def __init__(
         self,

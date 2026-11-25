@@ -93,6 +93,28 @@ restart or crash persistence. Existing measurement IDs, histories, source
 selection and timeouts are unchanged. Changed Python modules require a Core
 restart after updating the integration.
 
+The summary is a diagnostic entity, but that category alone does **not** exclude
+it from Recorder. To avoid storing a timestamp row for every accepted packet,
+add its actual entity ID to the existing `recorder.exclude.entities` list (the
+ID can be localized when the entity is first created). For an English-created
+entity, the entry normally looks like:
+
+```yaml
+recorder:
+  exclude:
+    entities:
+      - sensor.last_external_data_update
+```
+
+Merge this into existing Recorder settings rather than replacing them; leave
+measurement entities included so their history is preserved. The per-field
+`last_valid_received_at` attribute is marked unrecorded using Home Assistant's
+supported `_unrecorded_attributes` mechanism. It remains available to live
+consumers but is omitted from stored attribute payloads. This avoids a unique
+stored attribute payload for every receipt; it does **not** suppress measurement
+state rows caused by an attribute-only state change. Recorder exclusion and
+attribute filtering do not delete existing history or change retention.
+
 ## Installation
 
 
