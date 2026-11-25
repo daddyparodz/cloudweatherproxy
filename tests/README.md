@@ -9,9 +9,10 @@ uv pip install --python .venv/bin/python -r requirements-test-ha2026.10.txt
 ```
 
 The original `requirements.txt` targets HA 2025.12.5 and pins pycares<5;
-HA 2026.10.2 requires aiodns 4 / pycares>=5. Do not combine those files.
+HA 2026.11.3 requires aiodns 4 / pycares>=5. Do not combine those files.
+The historical requirements filename is retained for existing tooling.
 The initial reload regression also passed against the original HA 2025.12.5
-environment during development; the complete suite is verified against HA 2026.10.2.
+environment during development; the complete suite targets HA 2026.11.3.
 
 `test_receiver_lifecycle.py` uses real `HomeAssistant`, `ConfigEntries`,
 `ConfigEntry`, `HomeAssistantHTTP.register_view`, HA's view/auth wrapper, the
@@ -92,4 +93,23 @@ router API, active/accepting flags, in-flight leases, the shared deadline and
 cleanup ownership. The permanent
 registry retains no ConfigEntry object and survives unload/removal, so the route
 count remains two across reloads. The manifest version is
-`2026.2.3+sensorsource.6`. Changed Python modules require a Core restart to load.
+`2026.2.3+receipt.1`. Changed Python modules require a Core restart to load.
+
+## Accepted receipts
+
+`test_valid_receipt.py` exercises real local HTTP parsing and selected-owner
+acceptance: identical zero, invalid/nonfinite values, wrong units, wrong identity,
+non-owner fields, indoor-only packets, expiry retention and unknown after reload.
+The existing real EntityPlatform tests additionally register the timestamp sensor,
+assert its timestamp device class and English name, initial unknown state, UTC
+publication and registry identity reuse, alongside every previous measurement
+identity/unit/history-compatibility assertion. HA serializes timestamp states to
+whole seconds; per-field receipt attributes retain microseconds.
+
+The minimal direct-HomeAssistant fixtures initialize the actual frame and loader
+helpers plus custom-integration metadata normally supplied by bootstrap. They
+await real config-entry initialization before loading registries; otherwise the
+registry waits indefinitely for initialization. Lifecycle loader metadata uses
+synchronous mocks for synchronous methods and async mocks only for async methods.
+These harness corrections preserve real framework state transitions and all
+existing assertions; they do not replace lifecycle behavior or suppress errors.

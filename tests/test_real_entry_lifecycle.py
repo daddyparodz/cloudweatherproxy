@@ -1,7 +1,7 @@
 """Exercise HA's real entry state machine, holding its required setup lock."""
 # ruff: noqa: F811  # Imported pytest fixture names are intentionally injected.
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -13,9 +13,10 @@ from test_receiver_lifecycle import receiver, make_entry  # noqa: F401
 
 async def integration_for(entry):
     """Supply only loader metadata, not a replacement state machine."""
-    integration = AsyncMock()
+    integration = Mock()
     integration.domain = DOMAIN
-    integration.async_get_component.return_value = component
+    integration.async_get_component = AsyncMock(return_value=component)
+    integration.async_get_platform = AsyncMock()
     entry.supports_unload = True
     entry.supports_remove_device = False
     entry.async_migrate = AsyncMock(return_value=True)

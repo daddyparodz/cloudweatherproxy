@@ -20,6 +20,7 @@ async def test_combined_real_platform_renamed_ids_conversions_and_reload(tmp_pat
     hass = HomeAssistant(str(tmp_path))
     hass.config.units = US_CUSTOMARY_SYSTEM if imperial else METRIC_SYSTEM
     hass.config_entries = ConfigEntries(hass, {})
+    await hass.config_entries.async_initialize()
     dr.async_setup(hass)
     await dr.async_load(hass, load_empty=True)
     await er.async_load(hass, load_empty=True)
@@ -43,10 +44,20 @@ async def test_combined_real_platform_renamed_ids_conversions_and_reload(tmp_pat
             entry.runtime_data = SimpleNamespace(listener=listener, known_sensors={})
             pending = []
             await sensor.async_setup_entry(hass, entry, pending.extend)
+            await platform.async_add_entities(pending)
+            pending.clear()
+            timestamp = entry.runtime_data.external_data_timestamp
+            timestamp_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}-last_external_data_update")
+            assert timestamp.entity_id == timestamp_id
+            assert timestamp.name == "Last external data update"
+            assert hass.states.get(timestamp_id).state == "unknown"
             for station in (wc, wu, wc, wu):
                 await listener._new_dataset_cb(station)
                 await platform.async_add_entities(pending)
                 pending.clear()
+            stamp = hass.states.get(timestamp_id)
+            assert stamp.attributes["device_class"] == "timestamp"
+            assert stamp.state == timestamp.native_value.replace(microsecond=0).isoformat()
             assert platform.entities[old.entity_id].unique_id == "-rain"
             assert platform.entities[daily.entity_id].native_value == pytest.approx(50.8)
             assert registry.async_get_entity_id("sensor", DOMAIN, "-rain_1h") is None

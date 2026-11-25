@@ -3,17 +3,47 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import logging
 
 from .aiocloudweather import Sensor, WeatherStation
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUANTITY_DESCRIPTIONS
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class CloudWeatherTimestampEntity(SensorEntity):
+    """Latest accepted external field in this entry's current runtime.
+
+    Keep the last receipt through field expiry, but do not invent past receipt
+    history at startup. There is deliberately no expiry or restore timer here.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    entity_description = SensorEntityDescription(
+        key="last_external_data_update",
+        name="Last external data update",
+        translation_key="last_external_data_update",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    )
+
+    def __init__(self, entry_id: str) -> None:
+        """Use an entry-scoped identity independent of measurement identities."""
+        self._attr_unique_id = f"{entry_id}-last_external_data_update"
+        self._attr_native_value = None
+
+    def record_receipt(self, received_at: str) -> None:
+        """Publish only a receipt supplied by validated external ingestion."""
+        self._attr_native_value = datetime.fromisoformat(received_at)
+        if self.hass is not None:
+            self.async_write_ha_state()
 
 
 def quantity_key(sensor: Sensor, station: WeatherStation) -> str:
@@ -87,6 +117,10 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
             self._attr_unique_id = unique_id
         self._attr_name = name
         self._attr_native_value = sensor.value if sensor else None
+        # Creation follows selected-owner/identity/finite-value/unit validation.
+        self._attr_extra_state_attributes = {
+            "last_valid_received_at": dt_util.utcnow().isoformat(),
+        }
         self.entity_description = QUANTITY_DESCRIPTIONS[quantity_key(sensor, station)]
         semantic_names = {
             "rain_1h": "Rain past 60 minutes",
@@ -130,6 +164,11 @@ class CloudWeatherEntity(CloudWeatherBaseEntity, SensorEntity):
         self.sensor = new_sensor
 
         self._attr_native_value = self.sensor.value if self.sensor else None
+        # The accepted-field callback runs even for identical valid values.
+        # Expiry only changes availability and deliberately retains this receipt.
+        self._attr_extra_state_attributes = {
+            "last_valid_received_at": dt_util.utcnow().isoformat(),
+        }
 
         _LOGGER.debug("Updating %s [%s] with update time %s",
                       self.unique_id, self.sensor, self.station.update_time)

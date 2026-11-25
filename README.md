@@ -70,6 +70,29 @@ reference remains unconfirmed; existing pressure metadata is unchanged. No lux
 conversion is inferred from the console's selectable light display units, and the
 undocumented camel-case Wunderground solar field remains ignored.
 
+## Accepted external data timestamps
+
+**Last external data update** is a timestamp sensor for this integration entry
+(Italian: **Ultimo aggiornamento dati esterni**). It records the UTC acceptance
+time of the latest valid external field, after station identity, selected-source,
+fixed ownership, finite-value and unit validation. An identical valid value,
+including zero, renews it. Indoor-only packets and rejected fields do not.
+
+Each measurement also exposes `last_valid_received_at`, an ISO 8601 UTC attribute
+for that individual field. Field expiry retains that attribute and the summary
+timestamp; expiry itself never advances either. The summary stays readable when
+measurements become unavailable. This is receipt/acceptance time on the Home
+Assistant clock, not the station's observation time or a guarantee that every
+external field was present in the latest packet.
+
+Receipt timestamps are runtime-only: after integration reload or Core restart,
+the summary is **unknown** until the first valid external field is accepted.
+No time is reconstructed from old states, expiry deadlines or startup time. This
+avoids presenting historical guesses as accepted receipts; it does not promise
+restart or crash persistence. Existing measurement IDs, histories, source
+selection and timeouts are unchanged. Changed Python modules require a Core
+restart after updating the integration.
+
 ## Installation
 
 
